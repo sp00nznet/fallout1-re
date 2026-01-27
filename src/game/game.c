@@ -158,6 +158,13 @@ int game_init(const char* windowTitle, bool isMapper, int font, int a4, int argc
     config_get_value(&game_config, GAME_CONFIG_SYSTEM_KEY, GAME_CONFIG_WINDOWED_KEY, &windowed);
     GNW95_isWindowed = (windowed != 0);
 
+    // Read window scale setting (1, 2, 3, or 4)
+    int scale = 1;
+    config_get_value(&game_config, GAME_CONFIG_SYSTEM_KEY, GAME_CONFIG_SCALE_KEY, &scale);
+    if (scale < 1) scale = 1;
+    if (scale > 4) scale = 4;
+    GNW95_WindowScale = scale;
+
     initWindow(1, a4);
     palette_init();
 

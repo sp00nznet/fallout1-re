@@ -1,5 +1,8 @@
 #include "plib/gnw/svga.h"
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "plib/gnw/gnw.h"
 #include "plib/gnw/grbuf.h"
 #include "plib/gnw/mmx.h"
@@ -12,10 +15,15 @@ static int ffs(int bits);
 
 // Windowed mode support
 bool GNW95_isWindowed = true;
+int GNW95_WindowScale = 1;  // 1 = 640x480, 2 = 1280x960, etc.
 static LPDIRECTDRAWSURFACE GNW95_DDBackSurface = NULL;
 static LPDIRECTDRAWCLIPPER GNW95_DDClipper = NULL;
 static int GNW95_WindowWidth = 640;
 static int GNW95_WindowHeight = 480;
+
+// GDI-based windowed mode rendering
+static unsigned char* GNW95_WindowBuffer = NULL;
+static BITMAPINFO* GNW95_WindowBMI = NULL;
 
 // 0x51E2B0
 LPDIRECTDRAW GNW95_DDObject = NULL;
@@ -192,8 +200,10 @@ int GNW95_init_window()
 {
     if (GNW95_hwnd == NULL) {
         if (GNW95_isWindowed) {
-            // Windowed mode: create a regular overlapped window
-            RECT windowRect = { 0, 0, GNW95_WindowWidth, GNW95_WindowHeight };
+            // Windowed mode: create a regular overlapped window with scaling
+            int scaledWidth = GNW95_WindowWidth * GNW95_WindowScale;
+            int scaledHeight = GNW95_WindowHeight * GNW95_WindowScale;
+            RECT windowRect = { 0, 0, scaledWidth, scaledHeight };
             DWORD style = WS_OVERLAPPEDWINDOW & ~(WS_MAXIMIZEBOX | WS_THICKFRAME);
             AdjustWindowRect(&windowRect, style, FALSE);
 
@@ -276,76 +286,61 @@ int GNW95_init_DirectDraw(int width, int height, int bpp)
         return 0;
     }
 
-    if (GNW95_DirectDrawCreate(NULL, &GNW95_DDObject, NULL) != DD_OK) {
-        return -1;
-    }
-
     if (GNW95_isWindowed) {
-        // Windowed mode: use normal cooperative level
-        if (IDirectDraw_SetCooperativeLevel(GNW95_DDObject, GNW95_hwnd, DDSCL_NORMAL) != DD_OK) {
-            return -1;
-        }
-
-        // Create primary surface
-        DDSURFACEDESC ddsd;
-        memset(&ddsd, 0, sizeof(DDSURFACEDESC));
-        ddsd.dwSize = sizeof(DDSURFACEDESC);
-        ddsd.dwFlags = DDSD_CAPS;
-        ddsd.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
-
-        if (IDirectDraw_CreateSurface(GNW95_DDObject, &ddsd, &GNW95_DDPrimarySurface, NULL) != DD_OK) {
-            return -1;
-        }
-
-        // Create clipper for windowed mode
-        if (IDirectDraw_CreateClipper(GNW95_DDObject, 0, &GNW95_DDClipper, NULL) != DD_OK) {
-            return -1;
-        }
-
-        if (IDirectDrawClipper_SetHWnd(GNW95_DDClipper, 0, GNW95_hwnd) != DD_OK) {
-            return -1;
-        }
-
-        if (IDirectDrawSurface_SetClipper(GNW95_DDPrimarySurface, GNW95_DDClipper) != DD_OK) {
-            return -1;
-        }
-
-        // Create offscreen back buffer surface
-        memset(&ddsd, 0, sizeof(DDSURFACEDESC));
-        ddsd.dwSize = sizeof(DDSURFACEDESC);
-        ddsd.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
-        ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
-        ddsd.dwWidth = width;
-        ddsd.dwHeight = height;
-
-        if (IDirectDraw_CreateSurface(GNW95_DDObject, &ddsd, &GNW95_DDBackSurface, NULL) != DD_OK) {
-            return -1;
-        }
-
-        GNW95_DDRestoreSurface = GNW95_DDBackSurface;
-
-        if (bpp == 8) {
-            PALETTEENTRY pe[256];
-            for (int index = 0; index < 256; index++) {
-                pe[index].peRed = index;
-                pe[index].peGreen = index;
-                pe[index].peBlue = index;
-                pe[index].peFlags = 0;
-            }
-
-            if (IDirectDraw_CreatePalette(GNW95_DDObject, DDPCAPS_8BIT | DDPCAPS_ALLOW256, pe, &GNW95_DDPrimaryPalette, NULL) != DD_OK) {
-                return -1;
-            }
-
-            if (IDirectDrawSurface_SetPalette(GNW95_DDBackSurface, GNW95_DDPrimaryPalette) != DD_OK) {
-                return -1;
+        // Windowed mode: use GDI for screen rendering (better compatibility with modern Windows)
+        // Try to keep DirectDraw initialized for movie surface creation, but don't fail if it doesn't work
+        if (GNW95_DirectDrawCreate(NULL, &GNW95_DDObject, NULL) == DD_OK) {
+            if (IDirectDraw_SetCooperativeLevel(GNW95_DDObject, GNW95_hwnd, DDSCL_NORMAL) != DD_OK) {
+                // Cooperative level failed - release DirectDraw (movies won't work but game will)
+                IDirectDraw_Release(GNW95_DDObject);
+                GNW95_DDObject = NULL;
             }
         }
+        // Note: GNW95_DDObject may be NULL here - that's OK, movies just won't play
+
+        // Allocate the back buffer
+        GNW95_WindowBuffer = (unsigned char*)malloc(width * height);
+        if (GNW95_WindowBuffer == NULL) {
+            return -1;
+        }
+        memset(GNW95_WindowBuffer, 0, width * height);
+
+        // Allocate BITMAPINFO with palette
+        GNW95_WindowBMI = (BITMAPINFO*)malloc(sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD));
+        if (GNW95_WindowBMI == NULL) {
+            free(GNW95_WindowBuffer);
+            GNW95_WindowBuffer = NULL;
+            return -1;
+        }
+
+        // Setup bitmap info header
+        memset(GNW95_WindowBMI, 0, sizeof(BITMAPINFOHEADER));
+        GNW95_WindowBMI->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        GNW95_WindowBMI->bmiHeader.biWidth = width;
+        GNW95_WindowBMI->bmiHeader.biHeight = -height;  // Negative for top-down DIB
+        GNW95_WindowBMI->bmiHeader.biPlanes = 1;
+        GNW95_WindowBMI->bmiHeader.biBitCount = 8;
+        GNW95_WindowBMI->bmiHeader.biCompression = BI_RGB;
+
+        // Initialize palette to grayscale
+        for (int index = 0; index < 256; index++) {
+            GNW95_WindowBMI->bmiColors[index].rgbRed = index;
+            GNW95_WindowBMI->bmiColors[index].rgbGreen = index;
+            GNW95_WindowBMI->bmiColors[index].rgbBlue = index;
+            GNW95_WindowBMI->bmiColors[index].rgbReserved = 0;
+        }
+
+        GNW95_WindowWidth = width;
+        GNW95_WindowHeight = height;
 
         return 0;
     }
 
-    // Fullscreen mode
+    // Fullscreen mode - requires DirectDraw
+    if (GNW95_DirectDrawCreate(NULL, &GNW95_DDObject, NULL) != DD_OK) {
+        return -1;
+    }
+
     if (IDirectDraw_SetCooperativeLevel(GNW95_DDObject, GNW95_hwnd, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN) != DD_OK) {
         return -1;
     }
@@ -408,6 +403,17 @@ int GNW95_init_DirectDraw(int width, int height, int bpp)
 // 0x4CB1B0
 void GNW95_reset_mode()
 {
+    // Clean up GDI windowed mode resources
+    if (GNW95_WindowBuffer != NULL) {
+        free(GNW95_WindowBuffer);
+        GNW95_WindowBuffer = NULL;
+    }
+
+    if (GNW95_WindowBMI != NULL) {
+        free(GNW95_WindowBMI);
+        GNW95_WindowBMI = NULL;
+    }
+
     if (GNW95_DDObject != NULL) {
         if (!GNW95_isWindowed) {
             IDirectDraw_RestoreDisplayMode(GNW95_DDObject);
@@ -448,7 +454,12 @@ void GNW95_SetPaletteEntry(int entry, unsigned char r, unsigned char g, unsigned
     g <<= 2;
     b <<= 2;
 
-    if (GNW95_DDPrimaryPalette != NULL) {
+    if (GNW95_WindowBMI != NULL) {
+        // GDI windowed mode
+        GNW95_WindowBMI->bmiColors[entry].rgbRed = r;
+        GNW95_WindowBMI->bmiColors[entry].rgbGreen = g;
+        GNW95_WindowBMI->bmiColors[entry].rgbBlue = b;
+    } else if (GNW95_DDPrimaryPalette != NULL) {
         tempEntry.peRed = r;
         tempEntry.peGreen = g;
         tempEntry.peBlue = b;
@@ -469,7 +480,16 @@ void GNW95_SetPaletteEntry(int entry, unsigned char r, unsigned char g, unsigned
 // 0x4CB310
 void GNW95_SetPaletteEntries(unsigned char* palette, int start, int count)
 {
-    if (GNW95_DDPrimaryPalette != NULL) {
+    if (GNW95_WindowBMI != NULL) {
+        // GDI windowed mode
+        for (int index = 0; index < count; index++) {
+            GNW95_WindowBMI->bmiColors[start + index].rgbRed = palette[index * 3] << 2;
+            GNW95_WindowBMI->bmiColors[start + index].rgbGreen = palette[index * 3 + 1] << 2;
+            GNW95_WindowBMI->bmiColors[start + index].rgbBlue = palette[index * 3 + 2] << 2;
+        }
+        // Note: Don't refresh here - palette changes are applied on next draw
+        // This avoids issues during early initialization and improves performance
+    } else if (GNW95_DDPrimaryPalette != NULL) {
         PALETTEENTRY entries[256];
 
         if (count != 0) {
@@ -513,7 +533,16 @@ void GNW95_SetPaletteEntries(unsigned char* palette, int start, int count)
 // 0x4CB568
 void GNW95_SetPalette(unsigned char* palette)
 {
-    if (GNW95_DDPrimaryPalette != NULL) {
+    if (GNW95_WindowBMI != NULL) {
+        // GDI windowed mode
+        for (int index = 0; index < 256; index++) {
+            GNW95_WindowBMI->bmiColors[index].rgbRed = palette[index * 3] << 2;
+            GNW95_WindowBMI->bmiColors[index].rgbGreen = palette[index * 3 + 1] << 2;
+            GNW95_WindowBMI->bmiColors[index].rgbBlue = palette[index * 3 + 2] << 2;
+        }
+        // Note: Don't refresh here - palette changes are applied on next draw
+        // This avoids issues during early initialization
+    } else if (GNW95_DDPrimaryPalette != NULL) {
         PALETTEENTRY entries[256];
 
         for (int index = 0; index < 256; index++) {
@@ -560,7 +589,17 @@ unsigned char* GNW95_GetPalette()
     // buffer it too small to hold the entire palette, which require 256 * 3 bytes.
     //
     // 0x6ACA24
-    static unsigned char cmap[256];
+    static unsigned char cmap[768];  // Fixed: need 256 * 3 = 768 bytes
+
+    if (GNW95_WindowBMI != NULL) {
+        // GDI windowed mode
+        for (int index = 0; index < 256; index++) {
+            cmap[index * 3] = GNW95_WindowBMI->bmiColors[index].rgbRed >> 2;
+            cmap[index * 3 + 1] = GNW95_WindowBMI->bmiColors[index].rgbGreen >> 2;
+            cmap[index * 3 + 2] = GNW95_WindowBMI->bmiColors[index].rgbBlue >> 2;
+        }
+        return cmap;
+    }
 
     if (GNW95_DDPrimaryPalette != NULL) {
         PALETTEENTRY paletteEntries[256];
@@ -607,40 +646,40 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
         return;
     }
 
-    if (GNW95_isWindowed) {
-        // Windowed mode: draw to back buffer, then blit to primary
-        LPDIRECTDRAWSURFACE targetSurface = GNW95_DDBackSurface;
+    if (GNW95_WindowBuffer != NULL) {
+        // GDI windowed mode: copy to back buffer, then blit to window using GDI
+        buf_to_buf(src + srcPitch * srcY + srcX, srcWidth, srcHeight, srcPitch,
+                   GNW95_WindowBuffer + GNW95_WindowWidth * destY + destX, GNW95_WindowWidth);
 
-        while (1) {
-            ddsd.dwSize = sizeof(DDSURFACEDESC);
-
-            hr = IDirectDrawSurface_Lock(targetSurface, NULL, &ddsd, 1, NULL);
-            if (hr == DD_OK) {
-                break;
+        // Blit the updated region to the window with scaling
+        HDC hdc = GetDC(GNW95_hwnd);
+        if (hdc != NULL) {
+            int scale = GNW95_WindowScale;
+            if (scale == 1) {
+                // No scaling - use faster SetDIBitsToDevice
+                SetDIBitsToDevice(hdc,
+                    destX, destY,           // dest x, y
+                    srcWidth, srcHeight,    // width, height
+                    destX, GNW95_WindowHeight - destY - srcHeight,  // src x, y (DIB coordinates are bottom-up)
+                    0, GNW95_WindowHeight,  // start scan, num scans
+                    GNW95_WindowBuffer,
+                    GNW95_WindowBMI,
+                    DIB_RGB_COLORS);
+            } else {
+                // Scaled rendering - use StretchDIBits
+                SetStretchBltMode(hdc, COLORONCOLOR);
+                StretchDIBits(hdc,
+                    destX * scale, destY * scale,                   // dest x, y
+                    srcWidth * scale, srcHeight * scale,            // dest width, height
+                    destX, GNW95_WindowHeight - destY - srcHeight,  // src x, y
+                    srcWidth, srcHeight,                            // src width, height
+                    GNW95_WindowBuffer,
+                    GNW95_WindowBMI,
+                    DIB_RGB_COLORS,
+                    SRCCOPY);
             }
-
-            if (hr == DDERR_SURFACELOST) {
-                if (IDirectDrawSurface_Restore(targetSurface) != DD_OK) {
-                    return;
-                }
-            }
+            ReleaseDC(GNW95_hwnd, hdc);
         }
-
-        buf_to_buf(src + srcPitch * srcY + srcX, srcWidth, srcHeight, srcPitch, (unsigned char*)ddsd.lpSurface + ddsd.lPitch * destY + destX, ddsd.lPitch);
-
-        IDirectDrawSurface_Unlock(targetSurface, ddsd.lpSurface);
-
-        // Blit from back buffer to primary surface (window)
-        RECT srcRect = { (LONG)destX, (LONG)destY, (LONG)(destX + srcWidth), (LONG)(destY + srcHeight) };
-        RECT destRect;
-        POINT pt = { 0, 0 };
-        ClientToScreen(GNW95_hwnd, &pt);
-        destRect.left = pt.x + destX;
-        destRect.top = pt.y + destY;
-        destRect.right = pt.x + destX + srcWidth;
-        destRect.bottom = pt.y + destY + srcHeight;
-
-        IDirectDrawSurface_Blt(GNW95_DDPrimarySurface, &destRect, GNW95_DDBackSurface, &srcRect, DDBLT_WAIT, NULL);
     } else {
         // Fullscreen mode: draw directly to primary surface
         while (1) {

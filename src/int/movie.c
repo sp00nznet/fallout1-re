@@ -316,7 +316,58 @@ static void movie_MVE_ShowFrame(LPDIRECTDRAWSURFACE surface, int srcWidth, int s
             }
         }
 
-        hr = IDirectDrawSurface_Blt(GNW95_DDPrimarySurface, &destRect, surface, &srcRect, 0, NULL);
+        if (GNW95_isWindowed) {
+            // Windowed mode: use GDI to render the movie frame
+            if (IDirectDrawSurface_Lock(surface, NULL, &ddsd, 1, NULL) == DD_OK) {
+                unsigned char* data = (unsigned char*)ddsd.lpSurface;
+
+                // Create a temporary BITMAPINFO for the movie frame
+                BITMAPINFO* bmi = (BITMAPINFO*)malloc(sizeof(BITMAPINFOHEADER) + 256 * sizeof(RGBQUAD));
+                if (bmi != NULL) {
+                    memset(bmi, 0, sizeof(BITMAPINFOHEADER));
+                    bmi->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+                    bmi->bmiHeader.biWidth = ddsd.lPitch;  // Use pitch for width
+                    bmi->bmiHeader.biHeight = -srcHeight;  // Negative for top-down
+                    bmi->bmiHeader.biPlanes = 1;
+                    bmi->bmiHeader.biBitCount = 8;
+                    bmi->bmiHeader.biCompression = BI_RGB;
+
+                    // Copy palette from current game palette
+                    unsigned char* palette = GNW95_GetPalette();
+                    if (palette != NULL) {
+                        for (int i = 0; i < 256; i++) {
+                            bmi->bmiColors[i].rgbRed = palette[i * 3] << 2;
+                            bmi->bmiColors[i].rgbGreen = palette[i * 3 + 1] << 2;
+                            bmi->bmiColors[i].rgbBlue = palette[i * 3 + 2] << 2;
+                            bmi->bmiColors[i].rgbReserved = 0;
+                        }
+                    }
+
+                    HDC hdc = GetDC(GNW95_hwnd);
+                    if (hdc != NULL) {
+                        int scale = GNW95_WindowScale;
+                        SetStretchBltMode(hdc, COLORONCOLOR);
+                        StretchDIBits(hdc,
+                            destRect.left * scale, destRect.top * scale,
+                            (destRect.right - destRect.left) * scale, (destRect.bottom - destRect.top) * scale,
+                            srcX, 0,
+                            srcWidth, srcHeight,
+                            data,
+                            bmi,
+                            DIB_RGB_COLORS,
+                            SRCCOPY);
+                        ReleaseDC(GNW95_hwnd, hdc);
+                    }
+
+                    free(bmi);
+                }
+
+                IDirectDrawSurface_Unlock(surface, ddsd.lpSurface);
+            }
+            hr = DD_OK;
+        } else {
+            hr = IDirectDrawSurface_Blt(GNW95_DDPrimarySurface, &destRect, surface, &srcRect, 0, NULL);
+        }
     } while (hr != DD_OK && hr != DDERR_SURFACELOST && hr == DDERR_WASSTILLDRAWING);
 }
 

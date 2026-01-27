@@ -27,6 +27,9 @@ extern ScreenBlitFunc* scr_blit;
 // Windowed mode flag - set to true for windowed, false for fullscreen
 extern bool GNW95_isWindowed;
 
+// Window scale factor (1, 2, 3, 4) - only applies to windowed mode
+extern int GNW95_WindowScale;
+
 void mmxEnable(bool enable);
 int init_mode_320_200();
 int init_mode_320_400();

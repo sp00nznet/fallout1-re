@@ -207,13 +207,31 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         exit(EXIT_SUCCESS);
     case WM_PAINT:
         if (GetUpdateRect(hWnd, &updateRect, FALSE)) {
-            gnwUpdateRect.ulx = updateRect.left;
-            gnwUpdateRect.uly = updateRect.top;
-            gnwUpdateRect.lrx = updateRect.right - 1;
-            gnwUpdateRect.lry = updateRect.bottom - 1;
-            win_refresh_all(&gnwUpdateRect);
+            // Validate the entire client area to prevent continuous WM_PAINT messages
+            ValidateRect(hWnd, NULL);
+
+            // Only refresh if scr_size has been initialized (lrx > 0 means it's been set)
+            if (scr_size.lrx > 0) {
+                // In windowed mode, always refresh the full screen to ensure
+                // the GDI buffer has complete content
+                if (GNW95_isWindowed) {
+                    win_refresh_all(&scr_size);
+                } else {
+                    // Convert screen coordinates to game coordinates
+                    gnwUpdateRect.ulx = updateRect.left;
+                    gnwUpdateRect.uly = updateRect.top;
+                    gnwUpdateRect.lrx = updateRect.right - 1;
+                    gnwUpdateRect.lry = updateRect.bottom - 1;
+
+                    // Clamp to screen bounds
+                    if (gnwUpdateRect.lrx > scr_size.lrx) gnwUpdateRect.lrx = scr_size.lrx;
+                    if (gnwUpdateRect.lry > scr_size.lry) gnwUpdateRect.lry = scr_size.lry;
+
+                    win_refresh_all(&gnwUpdateRect);
+                }
+            }
         }
-        break;
+        return 0;
     case WM_SETCURSOR:
         if ((HWND)wParam == GNW95_hwnd) {
             SetCursor(NULL);
