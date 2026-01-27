@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  username      String    @unique
+  passwordHash  String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+  totalPlayTime Int       @default(0) // seconds
+  gamesPlayed   Int       @default(0)
+  gamesWon      Int       @default(0)
+
+  saves         SaveGame[]
+  characters    Character[]
+  hostedGames   GameSession[]     @relation("HostedGames")
+  participants  GameParticipant[]
+
+  @@index([email])
+  @@index([username])
+}
+
+model SaveGame {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot              Int      // 1-10
+  name              String
+  location          String   // Current map/area name
+  level             Int      @default(1)
+  playTime          Int      @default(0) // seconds
+  characterSnapshot Json     // Extracted character data for multiplayer
+  stateData         Bytes    // Full save state (compressed)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  isAutoSave        Boolean  @default(false)
+
+  @@unique([userId, slot])
+  @@index([userId])
+}
+
+model Character {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  level     Int      @default(1)
+
+  // SPECIAL stats
+  strength     Int @default(5)
+  perception   Int @default(5)
+  endurance    Int @default(5)
+  charisma     Int @default(5)
+  intelligence Int @default(5)
+  agility      Int @default(5)
+  luck         Int @default(5)
+
+  // Derived stats
+  maxHp        Int @default(30)
+  maxAp        Int @default(7)
+  sequence     Int @default(10) // For turn order
+
+  // Skills (stored as JSON for flexibility)
+  skills       Json @default("{}")
+
+  // Perks (array of perk IDs)
+  perks        Json @default("[]")
+
+  // Inventory (array of item objects)
+  inventory    Json @default("[]")
+
+  // Equipment slots
+  equippedArmor  String?
+  equippedWeapon String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Extracted from save game
+  sourceSlot   Int?
+
+  participants GameParticipant[]
+
+  @@index([userId])
+}
+
+enum GameStatus {
+  LOBBY      // Waiting for players
+  STARTING   // Game starting
+  PLAYING    // In progress
+  PAUSED     // Paused
+  FINISHED   // Game ended
+}
+
+enum GameVisibility {
+  PUBLIC     // Anyone can join
+  PRIVATE    // Invite only
+}
+
+model GameSession {
+  id            String         @id @default(uuid())
+  hostId        String
+  host          User           @relation("HostedGames", fields: [hostId], references: [id])
+  name          String
+  status        GameStatus     @default(LOBBY)
+  visibility    GameVisibility @default(PUBLIC)
+  maxPlayers    Int            @default(4)
+  password      String?        // For private games
+
+  // Level matching
+  hostLevel     Int            @default(1)
+  minLevel      Int            @default(1)
+  maxLevel      Int            @default(99)
+
+  // Current game state
+  currentMap    String         @default("desert1")
+  turnTimeBase  Int            @default(30) // seconds per player
+  currentTurn   Int            @default(0)
+  inCombat      Boolean        @default(false)
+  combatRound   Int            @default(0)
+
+  // Timestamps
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  startedAt     DateTime?
+  endedAt       DateTime?
+
+  participants  GameParticipant[]
+
+  @@index([status])
+  @@index([visibility, status])
+}
+
+model GameParticipant {
+  id           String      @id @default(uuid())
+  sessionId    String
+  session      GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+  characterId  String?
+  character    Character?  @relation(fields: [characterId], references: [id])
+
+  isHost       Boolean     @default(false)
+  isBot        Boolean     @default(false)
+  isConnected  Boolean     @default(true)
+  isReady      Boolean     @default(false)
+
+  // In-game position
+  tileIndex    Int         @default(0)
+  elevation    Int         @default(0)
+  rotation     Int         @default(0)
+
+  // Combat state
+  currentHp    Int         @default(30)
+  currentAp    Int         @default(7)
+  turnOrder    Int         @default(0)
+  isInCombat   Boolean     @default(false)
+  isDead       Boolean     @default(false)
+
+  // Stats
+  kills        Int         @default(0)
+  deaths       Int         @default(0)
+  damageDealt  Int         @default(0)
+
+  joinedAt     DateTime    @default(now())
+  lastActiveAt DateTime    @default(now())
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+enum BotType {
+  HOST    // Creates and hosts games
+  PLAYER  // Joins and plays in games
+}
+
+enum BotStatus {
+  IDLE
+  CREATING_GAME
+  IN_LOBBY
+  PLAYING
+  STOPPED
+}
+
+model Bot {
+  id              String    @id @default(uuid())
+  name            String    @unique
+  type            BotType
+  status          BotStatus @default(IDLE)
+
+  // Configuration
+  config          Json      @default("{}")
+  // For HOST bots: gameNameTemplate, maxPlayers, turnTime, createInterval
+  // For PLAYER bots: aggressiveness (0-1), skillLevel (0-1), preferredWeapons
+
+  // Current state
+  currentGameId   String?
+
+  // Statistics
+  gamesCreated    Int       @default(0)
+  gamesPlayed     Int       @default(0)
+  gamesWon        Int       @default(0)
+  kills           Int       @default(0)
+  deaths          Int       @default(0)
+
+  isEnabled       Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastActiveAt    DateTime?
+
+  @@index([type, status])
+}
+
+model ChatMessage {
+  id          String      @id @default(uuid())
+  sessionId   String
+  senderId    String
+  senderName  String
+  message     String
+  isSystem    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+
+  @@index([sessionId, createdAt])
+}
