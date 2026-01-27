@@ -1,0 +1,25 @@
+# Asset Converter - Extracts and converts Fallout 1 game files
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies for image processing
+RUN apk add --no-cache python3 make g++
+
+# Copy package files and tools
+COPY fallout1-web/package*.json ./
+COPY fallout1-web/tools/ ./tools/
+COPY fallout1-web/tsconfig.json ./
+COPY fallout1-web/src/data/ ./src/data/
+
+# Install dependencies
+RUN npm ci
+
+# Create output directories
+RUN mkdir -p /assets/art /assets/sound /assets/data
+
+# Conversion script
+COPY docker/convert-assets.sh /convert-assets.sh
+RUN chmod +x /convert-assets.sh
+
+ENTRYPOINT ["/convert-assets.sh"]

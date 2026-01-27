@@ -1,0 +1,38 @@
+# Fallout 1 HTML5 Web Port - Docker Compose
+#
+# IMPORTANT: This file is for local use only and should NOT be committed to git.
+# Place your game files in ./gamefiles/ before building.
+#
+# Required game files in ./gamefiles/:
+#   - master.dat
+#   - critter.dat
+#   - All other Fallout 1 data files
+#
+# The asset conversion will happen during the build process.
+
+version: '3.8'
+
+services:
+  fallout1-web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: fallout1-web
+    ports:
+      - "8080:80"
+    volumes:
+      # Mount converted assets (create these using the conversion tools first)
+      - ./assets:/usr/share/nginx/html/assets:ro
+    restart: unless-stopped
+
+  # Optional: Asset converter service (run once to convert game files)
+  asset-converter:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.converter
+    container_name: fallout1-converter
+    volumes:
+      - ./gamefiles:/gamefiles:ro
+      - ./assets:/assets
+    profiles:
+      - tools
