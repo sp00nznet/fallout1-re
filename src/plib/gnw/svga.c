@@ -678,7 +678,7 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
                 SRCCOPY);
             ReleaseDC(GNW95_hwnd, hdc);
         }
-    } else {
+    } else if (GNW95_DDPrimarySurface != NULL) {
         // Fullscreen mode: draw directly to primary surface
         while (1) {
             ddsd.dwSize = sizeof(DDSURFACEDESC);
@@ -699,6 +699,7 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
 
         IDirectDrawSurface_Unlock(GNW95_DDPrimarySurface, ddsd.lpSurface);
     }
+    // If neither windowed nor fullscreen surfaces are available, silently skip rendering
 }
 
 // 0x4CB93C
