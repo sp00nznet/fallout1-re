@@ -1,18 +1,20 @@
-# Fallout 1 HTML5 Web Port - Docker Compose
+# Fallout 1 Multiplayer Web Platform - Docker Compose
 #
-# IMPORTANT: This file is for local use only and should NOT be committed to git.
-# Place your game files in ./gamefiles/ before building.
+# This deploys the full multiplayer stack:
+# - Frontend (Nginx + Vite build)
+# - Backend API (Node.js)
+# - PostgreSQL database
+# - Redis cache/sessions
 #
 # Required game files in ./gamefiles/:
 #   - master.dat
 #   - critter.dat
 #   - All other Fallout 1 data files
-#
-# The asset conversion will happen during the build process.
 
 version: '3.8'
 
 services:
+  # Frontend - Nginx serving static files + proxy
   fallout1-web:
     build:
       context: ..
@@ -21,9 +23,70 @@ services:
     ports:
       - "8080:80"
     volumes:
-      # Mount converted assets (create these using the conversion tools first)
       - ./assets:/usr/share/nginx/html/assets:ro
+    depends_on:
+      - fallout1-api
     restart: unless-stopped
+    networks:
+      - fallout1-network
+
+  # Backend API Server
+  fallout1-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: fallout1-api
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://fallout1:fallout1password@postgres:5432/fallout1
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-fallout1-production-secret-change-me}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-fallout1-refresh-secret-change-me}
+      - CORS_ORIGIN=http://localhost:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - fallout1-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: fallout1-postgres
+    environment:
+      - POSTGRES_USER=fallout1
+      - POSTGRES_PASSWORD=fallout1password
+      - POSTGRES_DB=fallout1
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fallout1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - fallout1-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: fallout1-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - fallout1-network
 
   # Optional: Asset converter service (run once to convert game files)
   asset-converter:
@@ -36,3 +99,11 @@ services:
       - ./assets:/assets
     profiles:
       - tools
+
+networks:
+  fallout1-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
