@@ -152,6 +152,12 @@ int game_init(const char* windowTitle, bool isMapper, int font, int a4, int argc
 
     annoy_user();
     win_set_minimized_title(windowTitle);
+
+    // Read windowed mode setting from config
+    int windowed = 1;
+    config_get_value(&game_config, GAME_CONFIG_SYSTEM_KEY, GAME_CONFIG_WINDOWED_KEY, &windowed);
+    GNW95_isWindowed = (windowed != 0);
+
     initWindow(1, a4);
     palette_init();
 

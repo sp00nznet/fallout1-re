@@ -10,6 +10,13 @@ static int GNW95_init_mode_ex(int width, int height, int bpp);
 static int GNW95_init_mode(int width, int height);
 static int ffs(int bits);
 
+// Windowed mode support
+bool GNW95_isWindowed = true;
+static LPDIRECTDRAWSURFACE GNW95_DDBackSurface = NULL;
+static LPDIRECTDRAWCLIPPER GNW95_DDClipper = NULL;
+static int GNW95_WindowWidth = 640;
+static int GNW95_WindowHeight = 480;
+
 // 0x51E2B0
 LPDIRECTDRAW GNW95_DDObject = NULL;
 
@@ -184,10 +191,31 @@ static int GNW95_init_mode(int width, int height)
 int GNW95_init_window()
 {
     if (GNW95_hwnd == NULL) {
-        int width = GetSystemMetrics(SM_CXSCREEN);
-        int height = GetSystemMetrics(SM_CYSCREEN);
+        if (GNW95_isWindowed) {
+            // Windowed mode: create a regular overlapped window
+            RECT windowRect = { 0, 0, GNW95_WindowWidth, GNW95_WindowHeight };
+            DWORD style = WS_OVERLAPPEDWINDOW & ~(WS_MAXIMIZEBOX | WS_THICKFRAME);
+            AdjustWindowRect(&windowRect, style, FALSE);
 
-        GNW95_hwnd = CreateWindowExA(WS_EX_TOPMOST, "GNW95 Class", GNW95_title, WS_POPUP | WS_VISIBLE | WS_SYSMENU, 0, 0, width, height, NULL, NULL, GNW95_hInstance, NULL);
+            int windowWidth = windowRect.right - windowRect.left;
+            int windowHeight = windowRect.bottom - windowRect.top;
+
+            // Center on screen
+            int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+            int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+            int x = (screenWidth - windowWidth) / 2;
+            int y = (screenHeight - windowHeight) / 2;
+
+            GNW95_hwnd = CreateWindowExA(0, "GNW95 Class", GNW95_title, style | WS_VISIBLE,
+                x, y, windowWidth, windowHeight, NULL, NULL, GNW95_hInstance, NULL);
+        } else {
+            // Fullscreen mode: create a topmost popup covering the screen
+            int width = GetSystemMetrics(SM_CXSCREEN);
+            int height = GetSystemMetrics(SM_CYSCREEN);
+
+            GNW95_hwnd = CreateWindowExA(WS_EX_TOPMOST, "GNW95 Class", GNW95_title, WS_POPUP | WS_VISIBLE | WS_SYSMENU, 0, 0, width, height, NULL, NULL, GNW95_hInstance, NULL);
+        }
+
         if (GNW95_hwnd == NULL) {
             return -1;
         }
@@ -252,6 +280,72 @@ int GNW95_init_DirectDraw(int width, int height, int bpp)
         return -1;
     }
 
+    if (GNW95_isWindowed) {
+        // Windowed mode: use normal cooperative level
+        if (IDirectDraw_SetCooperativeLevel(GNW95_DDObject, GNW95_hwnd, DDSCL_NORMAL) != DD_OK) {
+            return -1;
+        }
+
+        // Create primary surface
+        DDSURFACEDESC ddsd;
+        memset(&ddsd, 0, sizeof(DDSURFACEDESC));
+        ddsd.dwSize = sizeof(DDSURFACEDESC);
+        ddsd.dwFlags = DDSD_CAPS;
+        ddsd.ddsCaps.dwCaps = DDSCAPS_PRIMARYSURFACE;
+
+        if (IDirectDraw_CreateSurface(GNW95_DDObject, &ddsd, &GNW95_DDPrimarySurface, NULL) != DD_OK) {
+            return -1;
+        }
+
+        // Create clipper for windowed mode
+        if (IDirectDraw_CreateClipper(GNW95_DDObject, 0, &GNW95_DDClipper, NULL) != DD_OK) {
+            return -1;
+        }
+
+        if (IDirectDrawClipper_SetHWnd(GNW95_DDClipper, 0, GNW95_hwnd) != DD_OK) {
+            return -1;
+        }
+
+        if (IDirectDrawSurface_SetClipper(GNW95_DDPrimarySurface, GNW95_DDClipper) != DD_OK) {
+            return -1;
+        }
+
+        // Create offscreen back buffer surface
+        memset(&ddsd, 0, sizeof(DDSURFACEDESC));
+        ddsd.dwSize = sizeof(DDSURFACEDESC);
+        ddsd.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT;
+        ddsd.ddsCaps.dwCaps = DDSCAPS_OFFSCREENPLAIN | DDSCAPS_SYSTEMMEMORY;
+        ddsd.dwWidth = width;
+        ddsd.dwHeight = height;
+
+        if (IDirectDraw_CreateSurface(GNW95_DDObject, &ddsd, &GNW95_DDBackSurface, NULL) != DD_OK) {
+            return -1;
+        }
+
+        GNW95_DDRestoreSurface = GNW95_DDBackSurface;
+
+        if (bpp == 8) {
+            PALETTEENTRY pe[256];
+            for (int index = 0; index < 256; index++) {
+                pe[index].peRed = index;
+                pe[index].peGreen = index;
+                pe[index].peBlue = index;
+                pe[index].peFlags = 0;
+            }
+
+            if (IDirectDraw_CreatePalette(GNW95_DDObject, DDPCAPS_8BIT | DDPCAPS_ALLOW256, pe, &GNW95_DDPrimaryPalette, NULL) != DD_OK) {
+                return -1;
+            }
+
+            if (IDirectDrawSurface_SetPalette(GNW95_DDBackSurface, GNW95_DDPrimaryPalette) != DD_OK) {
+                return -1;
+            }
+        }
+
+        return 0;
+    }
+
+    // Fullscreen mode
     if (IDirectDraw_SetCooperativeLevel(GNW95_DDObject, GNW95_hwnd, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN) != DD_OK) {
         return -1;
     }
@@ -315,7 +409,19 @@ int GNW95_init_DirectDraw(int width, int height, int bpp)
 void GNW95_reset_mode()
 {
     if (GNW95_DDObject != NULL) {
-        IDirectDraw_RestoreDisplayMode(GNW95_DDObject);
+        if (!GNW95_isWindowed) {
+            IDirectDraw_RestoreDisplayMode(GNW95_DDObject);
+        }
+
+        if (GNW95_DDClipper != NULL) {
+            IDirectDrawClipper_Release(GNW95_DDClipper);
+            GNW95_DDClipper = NULL;
+        }
+
+        if (GNW95_DDBackSurface != NULL) {
+            IDirectDrawSurface_Release(GNW95_DDBackSurface);
+            GNW95_DDBackSurface = NULL;
+        }
 
         if (GNW95_DDPrimarySurface != NULL) {
             IDirectDrawSurface_Release(GNW95_DDPrimarySurface);
@@ -501,24 +607,61 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
         return;
     }
 
-    while (1) {
-        ddsd.dwSize = sizeof(DDSURFACEDESC);
+    if (GNW95_isWindowed) {
+        // Windowed mode: draw to back buffer, then blit to primary
+        LPDIRECTDRAWSURFACE targetSurface = GNW95_DDBackSurface;
 
-        hr = IDirectDrawSurface_Lock(GNW95_DDPrimarySurface, NULL, &ddsd, 1, NULL);
-        if (hr == DD_OK) {
-            break;
-        }
+        while (1) {
+            ddsd.dwSize = sizeof(DDSURFACEDESC);
 
-        if (hr == DDERR_SURFACELOST) {
-            if (IDirectDrawSurface_Restore(GNW95_DDRestoreSurface) != DD_OK) {
-                return;
+            hr = IDirectDrawSurface_Lock(targetSurface, NULL, &ddsd, 1, NULL);
+            if (hr == DD_OK) {
+                break;
+            }
+
+            if (hr == DDERR_SURFACELOST) {
+                if (IDirectDrawSurface_Restore(targetSurface) != DD_OK) {
+                    return;
+                }
             }
         }
+
+        buf_to_buf(src + srcPitch * srcY + srcX, srcWidth, srcHeight, srcPitch, (unsigned char*)ddsd.lpSurface + ddsd.lPitch * destY + destX, ddsd.lPitch);
+
+        IDirectDrawSurface_Unlock(targetSurface, ddsd.lpSurface);
+
+        // Blit from back buffer to primary surface (window)
+        RECT srcRect = { (LONG)destX, (LONG)destY, (LONG)(destX + srcWidth), (LONG)(destY + srcHeight) };
+        RECT destRect;
+        POINT pt = { 0, 0 };
+        ClientToScreen(GNW95_hwnd, &pt);
+        destRect.left = pt.x + destX;
+        destRect.top = pt.y + destY;
+        destRect.right = pt.x + destX + srcWidth;
+        destRect.bottom = pt.y + destY + srcHeight;
+
+        IDirectDrawSurface_Blt(GNW95_DDPrimarySurface, &destRect, GNW95_DDBackSurface, &srcRect, DDBLT_WAIT, NULL);
+    } else {
+        // Fullscreen mode: draw directly to primary surface
+        while (1) {
+            ddsd.dwSize = sizeof(DDSURFACEDESC);
+
+            hr = IDirectDrawSurface_Lock(GNW95_DDPrimarySurface, NULL, &ddsd, 1, NULL);
+            if (hr == DD_OK) {
+                break;
+            }
+
+            if (hr == DDERR_SURFACELOST) {
+                if (IDirectDrawSurface_Restore(GNW95_DDRestoreSurface) != DD_OK) {
+                    return;
+                }
+            }
+        }
+
+        buf_to_buf(src + srcPitch * srcY + srcX, srcWidth, srcHeight, srcPitch, (unsigned char*)ddsd.lpSurface + ddsd.lPitch * destY + destX, ddsd.lPitch);
+
+        IDirectDrawSurface_Unlock(GNW95_DDPrimarySurface, ddsd.lpSurface);
     }
-
-    buf_to_buf(src + srcPitch * srcY + srcX, srcWidth, srcHeight, srcPitch, (unsigned char*)ddsd.lpSurface + ddsd.lPitch * destY + destX, ddsd.lPitch);
-
-    IDirectDrawSurface_Unlock(GNW95_DDPrimarySurface, ddsd.lpSurface);
 }
 
 // 0x4CB93C

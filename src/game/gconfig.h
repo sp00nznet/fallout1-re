@@ -26,6 +26,7 @@
 #define GAME_CONFIG_ART_CACHE_SIZE_KEY "art_cache_size"
 #define GAME_CONFIG_COLOR_CYCLING_KEY "color_cycling"
 #define GAME_CONFIG_CYCLE_SPEED_FACTOR_KEY "cycle_speed_factor"
+#define GAME_CONFIG_WINDOWED_KEY "windowed"
 #define GAME_CONFIG_HASHING_KEY "hashing"
 #define GAME_CONFIG_SPLASH_KEY "splash"
 #define GAME_CONFIG_FREE_SPACE_KEY "free_space"

@@ -24,6 +24,9 @@ extern int w95rshift;
 extern int w95gshift;
 extern ScreenBlitFunc* scr_blit;
 
+// Windowed mode flag - set to true for windowed, false for fullscreen
+extern bool GNW95_isWindowed;
+
 void mmxEnable(bool enable);
 int init_mode_320_200();
 int init_mode_320_400();
