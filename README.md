@@ -30,6 +30,58 @@ Please do not submit new features or any code that is not present in Fallout 1 b
 
 The source code in this repository is produced by reverse engineering the original binary. There are couple of exceptions for reverse engineering under DMCA - documentation, interoperability, fair use. Documentation is needed to achieve interoperability. Running your legally purchased copy on modern Mac M1 for example (interoperability in action) constitutes fair use. Publishing this stuff to wide audience is questionable. Eventually it's up to Bethesda/Microsoft to takedown the project or leave it be. See [#29](https://github.com/alexbatalov/fallout2-re/issues/29) for discussion.
 
+## HTML5 Web Port
+
+An HTML5/TypeScript port is available in the `fallout1-web/` directory, allowing you to play Fallout in a web browser.
+
+### Quick Start
+
+```bash
+cd fallout1-web
+npm install
+npm run dev
+```
+
+Then open http://localhost:5173 in your browser.
+
+### Building for Production
+
+```bash
+cd fallout1-web
+npm run build
+```
+
+The built files will be in `fallout1-web/dist/`.
+
+### Project Structure
+
+```
+fallout1-web/
+├── src/
+│   ├── core/           # Engine, asset management
+│   ├── platform/       # Graphics, input, audio, storage
+│   ├── data/           # File format loaders (FRM, LZSS)
+│   └── utils/          # Hex math, rectangles
+├── tools/              # Asset conversion tools
+└── public/             # Static files
+```
+
+### Asset Conversion
+
+The web port requires converted game assets. Use the provided tools:
+
+```bash
+# Extract DAT archives
+npx ts-node tools/dat-extractor.ts /path/to/master.dat ./assets/
+
+# Convert FRM sprites to PNG
+npx ts-node tools/frm-converter.ts ./assets/art/ ./assets/sprites/
+```
+
+### Docker Deployment
+
+For containerized deployment with game assets, see the `docker/` directory (not included in repository - requires your own game files).
+
 ## License
 
 The source code is this repository is available under the [Sustainable Use License](LICENSE.md).

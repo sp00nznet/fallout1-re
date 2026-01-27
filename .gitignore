@@ -390,3 +390,20 @@ FodyWeavers.xsd
 
 # CMake
 /out
+
+# Fallout 1 HTML5 Web Port - Docker deployment
+# These contain game assets and should never be committed
+docker/gamefiles/
+docker/assets/
+docker/*.dat
+
+# Build artifacts
+build/
+fallout1-web/dist/
+fallout1-web/node_modules/
+
+# Claude Code
+.claude/
+
+# Misc
+nul
