@@ -917,7 +917,16 @@ static int movieStart(int win, char* filePath, int (*a3)())
         v15 = 0;
     }
 
-    _MVE_rmPrepMovie((int)handle, v15, v16, v17);
+    int prepResult = _MVE_rmPrepMovie((int)handle, v15, v16, v17);
+    if (prepResult != 0) {
+        // Movie preparation failed (e.g., DirectDraw not available)
+        debug_printf("Movie preparation failed with code %d\n", prepResult);
+        db_fclose(handle);
+        handle = NULL;
+        running = 0;
+        GNWWin = -1;
+        return 1;
+    }
 
     if (movieScaleFlag) {
         debug_printf("scaled\n");
