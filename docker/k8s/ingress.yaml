@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fallout1-ingress
+  namespace: fallout1
+  annotations:
+    # For nginx ingress controller
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: "fallout1-api"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+    # SSL redirect (uncomment for production)
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  # Uncomment for TLS
+  # tls:
+  #   - hosts:
+  #       - fallout1.yourdomain.com
+  #     secretName: fallout1-tls
+  rules:
+    - host: fallout1.yourdomain.com
+      http:
+        paths:
+          # API routes
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: fallout1-api
+                port:
+                  number: 3001
+          # WebSocket route
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: fallout1-api
+                port:
+                  number: 3001
+          # Frontend (default)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fallout1-web
+                port:
+                  number: 80

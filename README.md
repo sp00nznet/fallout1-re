@@ -1,40 +1,31 @@
 # Fallout Reference Edition
 
-In this repository you'll find reverse engineered source code for Fallout: A Post Nuclear Role Playing Game.
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Web%20%7C%20Docker-blue" alt="Platform">
+  <img src="https://img.shields.io/badge/Multiplayer-Supported-green" alt="Multiplayer">
+  <img src="https://img.shields.io/badge/License-Sustainable%20Use-orange" alt="License">
+</p>
 
-This project is based on and share much of the code with [Fallout 2 Reference Edition](https://github.com/alexbatalov/fallout2-re), which I had decompiled earlier. Original Fallout engine is simpler in many ways, but it's still a different game, so I've decided to keep Fallout 1 and Fallout 2 as separate projects.
+A reverse-engineered source code recreation of **Fallout: A Post Nuclear Role Playing Game**, featuring an HTML5 web port and full multiplayer support.
 
-## Goal
+---
 
-The goal of this project is to restore original source code as close as possible with all it's imperfections. This means Windows/x86/640x480 among many other things. Original Fallout also had DOS and Mac OS X ports which are out of scope of this project.
+## Overview
 
-## Status
+| Component | Description |
+|-----------|-------------|
+| **Native Engine** | Restored Windows/x86 source code matching the original binary |
+| **Web Port** | HTML5/TypeScript browser-based client |
+| **Multiplayer Server** | Node.js backend with real-time game sync |
+| **Bot System** | AI players for solo or mixed games |
 
-The game can be completed from start to finish. About 6% of functions from Fallout 2 codebase is currently under review. As with F2RE there is a small number of functions that are not decompiled because they are never used in the game.
+## Quick Start
 
-## Installation
+### Option 1: Native Windows
 
-You must own the game to play. Purchase your copy on [GOG](https://www.gog.com/game/fallout) or [Steam](https://store.steampowered.com/app/38400). Download latest build or build from source. The `fallout-re.exe` serves as a drop-in replacement for `falloutw.exe`. Copy it to your Fallout directory and run.
+Download latest build or compile from source. Copy `fallout-re.exe` to your Fallout directory as a drop-in replacement for `falloutw.exe`.
 
-## Contributing
-
-The best thing you can do is to play and report bugs or inconsistencies. Attach zipped save if needed.
-
-Please do not submit new features or any code that is not present in Fallout 1 binary. Once decompilation/review process is completed the development will be continued in the new repository. This repository will be left intact for historical reasons.
-
-## Special Thanks
-
-- [c6](https://github.com/c6-dev): for extensive gameplay testing.
-
-## Legal
-
-The source code in this repository is produced by reverse engineering the original binary. There are couple of exceptions for reverse engineering under DMCA - documentation, interoperability, fair use. Documentation is needed to achieve interoperability. Running your legally purchased copy on modern Mac M1 for example (interoperability in action) constitutes fair use. Publishing this stuff to wide audience is questionable. Eventually it's up to Bethesda/Microsoft to takedown the project or leave it be. See [#29](https://github.com/alexbatalov/fallout2-re/issues/29) for discussion.
-
-## HTML5 Web Port
-
-An HTML5/TypeScript port is available in the `fallout1-web/` directory, allowing you to play Fallout in a web browser.
-
-### Quick Start
+### Option 2: Web Browser (Single Player)
 
 ```bash
 cd fallout1-web
@@ -42,46 +33,205 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:5173 in your browser.
+Open http://localhost:5173
 
-### Building for Production
+### Option 3: Multiplayer (Docker)
+
+```powershell
+# Start everything
+.\scripts\server.ps1 -Start
+
+# Or manually:
+cd docker
+docker-compose up -d
+```
+
+Open http://localhost:8080
+
+---
+
+## Project Structure
+
+```
+fallout1-re/
+├── src/                    # Original C engine source
+│   ├── game/               # Game logic (combat, dialogue, maps)
+│   └── plib/               # Platform library (graphics, input)
+│
+├── fallout1-web/           # HTML5 Web Port
+│   └── src/
+│       ├── core/           # Engine, asset management
+│       ├── platform/       # Graphics, audio, input, storage
+│       ├── multiplayer/    # Real-time sync, player rendering
+│       ├── ui/             # Login, lobby, game browser, HUD
+│       └── services/       # Auth, game API clients
+│
+├── fallout1-server/        # Multiplayer Backend
+│   └── src/
+│       ├── api/            # REST endpoints
+│       ├── websocket/      # Real-time communication
+│       ├── services/       # Business logic
+│       └── bots/           # AI player system
+│
+├── docker/                 # Container configs
+├── scripts/                # Management scripts
+└── docs/                   # Documentation
+```
+
+---
+
+## Multiplayer Features
+
+<table>
+<tr>
+<td width="50%">
+
+### Player Features
+- User registration & authentication
+- Cloud save synchronization
+- Character import from saves
+- Public & private game lobbies
+- Real-time chat
+- Turn-based combat
+
+</td>
+<td width="50%">
+
+### Technical Features
+- WebSocket real-time sync
+- JWT authentication
+- PostgreSQL persistence
+- Redis session caching
+- Automatic reconnection
+- Delta state updates
+
+</td>
+</tr>
+</table>
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      NGINX (Port 8080)                       │
+│         Static files + /api proxy + /ws WebSocket            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┴─────────────────────┐
+        ▼                                           ▼
+┌───────────────────┐                    ┌───────────────────┐
+│     Frontend      │◄──── WebSocket ───►│     Backend       │
+│   (Vite + TS)     │                    │  (Node + Express) │
+└───────────────────┘                    └───────────────────┘
+                                                  │
+                    ┌─────────────────────────────┼─────────────────────────────┐
+                    ▼                             ▼                             ▼
+             ┌─────────────┐              ┌─────────────┐              ┌─────────────┐
+             │ PostgreSQL  │              │    Redis    │              │  Bot System │
+             │   Users     │              │  Sessions   │              │  Host/Player│
+             │   Games     │              │  Timers     │              │     AI      │
+             └─────────────┘              └─────────────┘              └─────────────┘
+```
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Multiplayer Guide](docs/MULTIPLAYER.md) | How multiplayer works, WebSocket protocol |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Production deployment instructions |
+| [API Reference](docs/API.md) | REST & WebSocket API documentation |
+
+---
+
+## Development
+
+### Prerequisites
+
+- Node.js 20+
+- Docker & Docker Compose
+- Original Fallout game files
+
+### Local Development
 
 ```bash
+# Backend
+cd fallout1-server
+npm install
+npm run dev
+
+# Frontend (separate terminal)
 cd fallout1-web
-npm run build
+npm install
+npm run dev
 ```
 
-The built files will be in `fallout1-web/dist/`.
-
-### Project Structure
-
-```
-fallout1-web/
-├── src/
-│   ├── core/           # Engine, asset management
-│   ├── platform/       # Graphics, input, audio, storage
-│   ├── data/           # File format loaders (FRM, LZSS)
-│   └── utils/          # Hex math, rectangles
-├── tools/              # Asset conversion tools
-└── public/             # Static files
-```
-
-### Asset Conversion
-
-The web port requires converted game assets. Use the provided tools:
+### Database Setup
 
 ```bash
-# Extract DAT archives
-npx ts-node tools/dat-extractor.ts /path/to/master.dat ./assets/
-
-# Convert FRM sprites to PNG
-npx ts-node tools/frm-converter.ts ./assets/art/ ./assets/sprites/
+cd fallout1-server
+npx prisma migrate dev
+npx prisma studio  # Optional: DB viewer
 ```
 
-### Docker Deployment
+---
 
-For containerized deployment with game assets, see the `docker/` directory (not included in repository - requires your own game files).
+## Management Script
+
+Use the PowerShell script for easy server management:
+
+```powershell
+# Start all services
+.\scripts\server.ps1 -Start
+
+# Stop all services
+.\scripts\server.ps1 -Stop
+
+# View logs
+.\scripts\server.ps1 -Logs
+
+# Restart specific service
+.\scripts\server.ps1 -Restart -Service api
+
+# Check status
+.\scripts\server.ps1 -Status
+
+# Run database migrations
+.\scripts\server.ps1 -Migrate
+```
+
+---
+
+## Bot System
+
+The server includes AI bots for testing and filling games:
+
+| Bot Type | Description |
+|----------|-------------|
+| **Host Bot** | Auto-creates public games at intervals |
+| **Player Bot** | Joins games and plays using combat AI |
+
+Bots evaluate targets based on hit chance × expected damage, heal when low HP, and use tactical positioning.
+
+---
+
+## Legal
+
+The source code is produced by reverse engineering the original binary for documentation and interoperability purposes. You must own a legal copy of Fallout to use this project.
+
+**Purchase:** [GOG](https://www.gog.com/game/fallout) | [Steam](https://store.steampowered.com/app/38400)
+
+---
+
+## Credits
+
+- Original reverse engineering by [alexbatalov](https://github.com/alexbatalov)
+- Based on [Fallout 2 Reference Edition](https://github.com/alexbatalov/fallout2-re)
+- [c6](https://github.com/c6-dev): Extensive gameplay testing
+
+---
 
 ## License
 
-The source code is this repository is available under the [Sustainable Use License](LICENSE.md).
+[Sustainable Use License](LICENSE.md)

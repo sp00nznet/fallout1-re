@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fallout1
+  labels:
+    app: fallout1
+    environment: production
