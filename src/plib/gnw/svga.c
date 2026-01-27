@@ -646,7 +646,17 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
         return;
     }
 
-    if (GNW95_WindowBuffer != NULL) {
+    if (src == NULL) {
+        return;
+    }
+
+    if (GNW95_WindowBuffer != NULL && GNW95_hwnd != NULL) {
+        // Bounds checking to prevent buffer overrun
+        if (destX + srcWidth > (unsigned int)GNW95_WindowWidth ||
+            destY + srcHeight > (unsigned int)GNW95_WindowHeight) {
+            return;
+        }
+
         // GDI windowed mode: copy to back buffer, then blit to window using GDI
         buf_to_buf(src + srcPitch * srcY + srcX, srcWidth, srcHeight, srcPitch,
                    GNW95_WindowBuffer + GNW95_WindowWidth * destY + destX, GNW95_WindowWidth);
@@ -655,29 +665,17 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
         HDC hdc = GetDC(GNW95_hwnd);
         if (hdc != NULL) {
             int scale = GNW95_WindowScale;
-            if (scale == 1) {
-                // No scaling - use faster SetDIBitsToDevice
-                SetDIBitsToDevice(hdc,
-                    destX, destY,           // dest x, y
-                    srcWidth, srcHeight,    // width, height
-                    destX, GNW95_WindowHeight - destY - srcHeight,  // src x, y (DIB coordinates are bottom-up)
-                    0, GNW95_WindowHeight,  // start scan, num scans
-                    GNW95_WindowBuffer,
-                    GNW95_WindowBMI,
-                    DIB_RGB_COLORS);
-            } else {
-                // Scaled rendering - use StretchDIBits
-                SetStretchBltMode(hdc, COLORONCOLOR);
-                StretchDIBits(hdc,
-                    destX * scale, destY * scale,                   // dest x, y
-                    srcWidth * scale, srcHeight * scale,            // dest width, height
-                    destX, GNW95_WindowHeight - destY - srcHeight,  // src x, y
-                    srcWidth, srcHeight,                            // src width, height
-                    GNW95_WindowBuffer,
-                    GNW95_WindowBMI,
-                    DIB_RGB_COLORS,
-                    SRCCOPY);
-            }
+            // Use StretchDIBits for all cases - it handles top-down DIBs correctly
+            SetStretchBltMode(hdc, COLORONCOLOR);
+            StretchDIBits(hdc,
+                destX * scale, destY * scale,           // dest x, y
+                srcWidth * scale, srcHeight * scale,    // dest width, height
+                destX, destY,                           // src x, y (top-down DIB, no flip needed)
+                srcWidth, srcHeight,                    // src width, height
+                GNW95_WindowBuffer,
+                GNW95_WindowBMI,
+                DIB_RGB_COLORS,
+                SRCCOPY);
             ReleaseDC(GNW95_hwnd, hdc);
         }
     } else {
