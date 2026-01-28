@@ -6,47 +6,11 @@
     Manages the Docker-based multiplayer server stack including
     the web frontend, API server, PostgreSQL, and Redis.
 
-.PARAMETER Start
-    Start all services
-
-.PARAMETER Stop
-    Stop all services
-
-.PARAMETER Restart
-    Restart services (all or specific)
-
-.PARAMETER Status
-    Show service status
-
-.PARAMETER Logs
-    View service logs
-
-.PARAMETER Migrate
-    Run database migrations
-
-.PARAMETER Build
-    Rebuild containers
-
-.PARAMETER Clean
-    Remove containers, volumes, and images
-
-.PARAMETER Service
-    Specific service to target (web, api, postgres, redis)
-
-.PARAMETER Follow
-    Follow log output (use with -Logs)
-
-.PARAMETER Tail
-    Number of log lines to show (default: 100)
-
 .EXAMPLE
     .\server.ps1 -Start
-
-.EXAMPLE
+    .\server.ps1 -Stop
+    .\server.ps1 -Status
     .\server.ps1 -Logs -Service api -Follow
-
-.EXAMPLE
-    .\server.ps1 -Restart -Service api
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'Status')]
@@ -99,42 +63,33 @@ $ServiceMap = @{
     'redis'    = 'redis'
 }
 
-# Colors
-$Colors = @{
-    Success = 'Green'
-    Error   = 'Red'
-    Warning = 'Yellow'
-    Info    = 'Cyan'
-    Header  = 'Magenta'
-}
-
 function Write-Header {
     param([string]$Text)
     Write-Host ""
-    Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor $Colors.Header
-    Write-Host "  $Text" -ForegroundColor $Colors.Header
-    Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor $Colors.Header
+    Write-Host "=======================================================" -ForegroundColor Magenta
+    Write-Host "  $Text" -ForegroundColor Magenta
+    Write-Host "=======================================================" -ForegroundColor Magenta
     Write-Host ""
 }
 
 function Write-Status {
     param(
-        [string]$Text,
-        [string]$Status,
+        [string]$Label,
+        [string]$Value,
         [string]$Color = 'White'
     )
-    Write-Host "  $Text : " -NoNewline
-    Write-Host $Status -ForegroundColor $Color
+    Write-Host "  $Label : " -NoNewline
+    Write-Host $Value -ForegroundColor $Color
 }
 
 function Test-DockerRunning {
     try {
-        docker info 2>&1 | Out-Null
+        $null = docker info 2>&1
         return $true
     }
     catch {
-        Write-Host "ERROR: Docker is not running!" -ForegroundColor $Colors.Error
-        Write-Host "Please start Docker Desktop and try again." -ForegroundColor $Colors.Warning
+        Write-Host "ERROR: Docker is not running!" -ForegroundColor Red
+        Write-Host "Please start Docker Desktop and try again." -ForegroundColor Yellow
         return $false
     }
 }
@@ -153,12 +108,12 @@ function Invoke-DockerCompose {
 
     Push-Location $DockerDir
     try {
-        $cmd = "docker-compose -f `"$ComposeFile`" $($Arguments -join ' ')"
+        $cmdArgs = @('-f', $ComposeFile) + $Arguments
         if ($PassThru) {
-            Invoke-Expression $cmd
+            & docker-compose @cmdArgs
         }
         else {
-            Invoke-Expression $cmd | Out-Null
+            $null = & docker-compose @cmdArgs 2>&1
         }
     }
     finally {
@@ -167,17 +122,13 @@ function Invoke-DockerCompose {
 }
 
 function Show-Banner {
-    Write-Host @"
+    $banner = @"
 
-    ███████╗ █████╗ ██╗     ██╗      ██████╗ ██╗   ██╗████████╗     ██╗
-    ██╔════╝██╔══██╗██║     ██║     ██╔═══██╗██║   ██║╚══██╔══╝    ███║
-    █████╗  ███████║██║     ██║     ██║   ██║██║   ██║   ██║       ╚██║
-    ██╔══╝  ██╔══██║██║     ██║     ██║   ██║██║   ██║   ██║        ██║
-    ██║     ██║  ██║███████╗███████╗╚██████╔╝╚██████╔╝   ██║        ██║
-    ╚═╝     ╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝  ╚═════╝    ╚═╝        ╚═╝
-                        MULTIPLAYER SERVER
+    FALLOUT 1 MULTIPLAYER SERVER
+    ============================
 
-"@ -ForegroundColor $Colors.Header
+"@
+    Write-Host $banner -ForegroundColor Magenta
 }
 
 function Start-Services {
@@ -185,28 +136,28 @@ function Start-Services {
 
     if (-not (Test-DockerRunning)) { return }
 
-    $serviceName = Get-ServiceName $Service
+    $svcName = Get-ServiceName $Service
 
-    Write-Host "  Starting containers..." -ForegroundColor $Colors.Info
+    Write-Host "  Starting containers..." -ForegroundColor Cyan
 
-    if ($serviceName) {
-        Invoke-DockerCompose @('up', '-d', $serviceName) -PassThru
+    if ($svcName) {
+        Invoke-DockerCompose -Arguments @('up', '-d', $svcName) -PassThru
     }
     else {
-        Invoke-DockerCompose @('up', '-d') -PassThru
+        Invoke-DockerCompose -Arguments @('up', '-d') -PassThru
     }
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""
-        Write-Host "  Services started successfully!" -ForegroundColor $Colors.Success
+        Write-Host "  Services started successfully!" -ForegroundColor Green
         Write-Host ""
-        Write-Host "  Web Client:  http://localhost:8080" -ForegroundColor $Colors.Info
-        Write-Host "  API:         http://localhost:8080/api" -ForegroundColor $Colors.Info
-        Write-Host "  WebSocket:   ws://localhost:8080/ws" -ForegroundColor $Colors.Info
+        Write-Host "  Web Client:  http://localhost:8080" -ForegroundColor Cyan
+        Write-Host "  API:         http://localhost:8080/api" -ForegroundColor Cyan
+        Write-Host "  WebSocket:   ws://localhost:8080/ws" -ForegroundColor Cyan
         Write-Host ""
     }
     else {
-        Write-Host "  Failed to start services!" -ForegroundColor $Colors.Error
+        Write-Host "  Failed to start services!" -ForegroundColor Red
     }
 }
 
@@ -215,19 +166,19 @@ function Stop-Services {
 
     if (-not (Test-DockerRunning)) { return }
 
-    $serviceName = Get-ServiceName $Service
+    $svcName = Get-ServiceName $Service
 
-    Write-Host "  Stopping containers..." -ForegroundColor $Colors.Info
+    Write-Host "  Stopping containers..." -ForegroundColor Cyan
 
-    if ($serviceName) {
-        Invoke-DockerCompose @('stop', $serviceName) -PassThru
+    if ($svcName) {
+        Invoke-DockerCompose -Arguments @('stop', $svcName) -PassThru
     }
     else {
-        Invoke-DockerCompose @('down') -PassThru
+        Invoke-DockerCompose -Arguments @('down') -PassThru
     }
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  Services stopped." -ForegroundColor $Colors.Success
+        Write-Host "  Services stopped." -ForegroundColor Green
     }
 }
 
@@ -236,19 +187,19 @@ function Restart-Services {
 
     if (-not (Test-DockerRunning)) { return }
 
-    $serviceName = Get-ServiceName $Service
+    $svcName = Get-ServiceName $Service
 
-    if ($serviceName) {
-        Write-Host "  Restarting $Service..." -ForegroundColor $Colors.Info
-        Invoke-DockerCompose @('restart', $serviceName) -PassThru
+    if ($svcName) {
+        Write-Host "  Restarting $Service..." -ForegroundColor Cyan
+        Invoke-DockerCompose -Arguments @('restart', $svcName) -PassThru
     }
     else {
-        Write-Host "  Restarting all services..." -ForegroundColor $Colors.Info
-        Invoke-DockerCompose @('restart') -PassThru
+        Write-Host "  Restarting all services..." -ForegroundColor Cyan
+        Invoke-DockerCompose -Arguments @('restart') -PassThru
     }
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  Restart complete." -ForegroundColor $Colors.Success
+        Write-Host "  Restart complete." -ForegroundColor Green
     }
 }
 
@@ -257,20 +208,20 @@ function Show-Status {
 
     if (-not (Test-DockerRunning)) { return }
 
-    $containers = docker ps -a --filter "name=fallout1" --format "{{.Names}}\t{{.Status}}\t{{.Ports}}" 2>&1
+    $containers = docker ps -a --filter "name=fallout1" --format "{{.Names}}|{{.Status}}|{{.Ports}}" 2>&1
 
     if ($containers) {
-        Write-Host "  NAME                    STATUS                  PORTS" -ForegroundColor $Colors.Info
-        Write-Host "  ─────────────────────────────────────────────────────────────────" -ForegroundColor Gray
+        Write-Host "  NAME                    STATUS                  PORTS" -ForegroundColor Cyan
+        Write-Host "  ---------------------------------------------------------------" -ForegroundColor Gray
 
         foreach ($line in $containers) {
-            $parts = $line -split "`t"
+            $parts = $line -split '\|'
             if ($parts.Count -ge 2) {
                 $name = $parts[0].PadRight(24)
                 $status = $parts[1]
                 $ports = if ($parts.Count -ge 3) { $parts[2] } else { "" }
 
-                $color = if ($status -match "Up") { $Colors.Success } else { $Colors.Warning }
+                $color = if ($status -match "Up") { "Green" } else { "Yellow" }
                 Write-Host "  $name" -NoNewline
                 Write-Host $status.PadRight(24) -ForegroundColor $color -NoNewline
                 Write-Host $ports -ForegroundColor Gray
@@ -278,27 +229,26 @@ function Show-Status {
         }
     }
     else {
-        Write-Host "  No containers found." -ForegroundColor $Colors.Warning
+        Write-Host "  No containers found." -ForegroundColor Yellow
     }
 
-    # Check database connection
     Write-Host ""
-    Write-Host "  Database Health:" -ForegroundColor $Colors.Info
+    Write-Host "  Database Health:" -ForegroundColor Cyan
+
     $pgHealth = docker exec fallout1-postgres pg_isready -U fallout1 2>&1
     if ($pgHealth -match "accepting") {
-        Write-Status "PostgreSQL" "Healthy" $Colors.Success
+        Write-Status -Label "PostgreSQL" -Value "Healthy" -Color Green
     }
     else {
-        Write-Status "PostgreSQL" "Unavailable" $Colors.Error
+        Write-Status -Label "PostgreSQL" -Value "Unavailable" -Color Red
     }
 
-    # Check Redis
     $redisHealth = docker exec fallout1-redis redis-cli ping 2>&1
     if ($redisHealth -eq "PONG") {
-        Write-Status "Redis" "Healthy" $Colors.Success
+        Write-Status -Label "Redis" -Value "Healthy" -Color Green
     }
     else {
-        Write-Status "Redis" "Unavailable" $Colors.Error
+        Write-Status -Label "Redis" -Value "Unavailable" -Color Red
     }
 
     Write-Host ""
@@ -309,13 +259,13 @@ function Show-Logs {
 
     if (-not (Test-DockerRunning)) { return }
 
-    $serviceName = Get-ServiceName $Service
+    $svcName = Get-ServiceName $Service
 
-    $args = @('logs', "--tail=$Tail")
-    if ($Follow) { $args += '-f' }
-    if ($serviceName) { $args += $serviceName }
+    $logArgs = @('logs', "--tail=$Tail")
+    if ($Follow) { $logArgs += '-f' }
+    if ($svcName) { $logArgs += $svcName }
 
-    Invoke-DockerCompose $args -PassThru
+    Invoke-DockerCompose -Arguments $logArgs -PassThru
 }
 
 function Invoke-Migration {
@@ -323,15 +273,15 @@ function Invoke-Migration {
 
     if (-not (Test-DockerRunning)) { return }
 
-    Write-Host "  Running Prisma migrations..." -ForegroundColor $Colors.Info
+    Write-Host "  Running Prisma migrations..." -ForegroundColor Cyan
 
     docker exec fallout1-api npx prisma migrate deploy
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  Migrations complete." -ForegroundColor $Colors.Success
+        Write-Host "  Migrations complete." -ForegroundColor Green
     }
     else {
-        Write-Host "  Migration failed!" -ForegroundColor $Colors.Error
+        Write-Host "  Migration failed!" -ForegroundColor Red
     }
 }
 
@@ -340,19 +290,19 @@ function Build-Containers {
 
     if (-not (Test-DockerRunning)) { return }
 
-    $serviceName = Get-ServiceName $Service
+    $svcName = Get-ServiceName $Service
 
-    Write-Host "  Building images..." -ForegroundColor $Colors.Info
+    Write-Host "  Building images..." -ForegroundColor Cyan
 
-    if ($serviceName) {
-        Invoke-DockerCompose @('build', '--no-cache', $serviceName) -PassThru
+    if ($svcName) {
+        Invoke-DockerCompose -Arguments @('build', '--no-cache', $svcName) -PassThru
     }
     else {
-        Invoke-DockerCompose @('build', '--no-cache') -PassThru
+        Invoke-DockerCompose -Arguments @('build', '--no-cache') -PassThru
     }
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "  Build complete." -ForegroundColor $Colors.Success
+        Write-Host "  Build complete." -ForegroundColor Green
     }
 }
 
@@ -361,21 +311,21 @@ function Clean-Environment {
 
     if (-not (Test-DockerRunning)) { return }
 
-    Write-Host "  WARNING: This will remove all containers, volumes, and images!" -ForegroundColor $Colors.Warning
+    Write-Host "  WARNING: This will remove all containers, volumes, and images!" -ForegroundColor Yellow
     $confirm = Read-Host "  Are you sure? (yes/no)"
 
     if ($confirm -ne 'yes') {
-        Write-Host "  Cancelled." -ForegroundColor $Colors.Info
+        Write-Host "  Cancelled." -ForegroundColor Cyan
         return
     }
 
-    Write-Host "  Stopping containers..." -ForegroundColor $Colors.Info
-    Invoke-DockerCompose @('down', '-v', '--rmi', 'local') -PassThru
+    Write-Host "  Stopping containers..." -ForegroundColor Cyan
+    Invoke-DockerCompose -Arguments @('down', '-v', '--rmi', 'local') -PassThru
 
-    Write-Host "  Removing orphan volumes..." -ForegroundColor $Colors.Info
-    docker volume prune -f 2>&1 | Out-Null
+    Write-Host "  Removing orphan volumes..." -ForegroundColor Cyan
+    $null = docker volume prune -f 2>&1
 
-    Write-Host "  Clean complete." -ForegroundColor $Colors.Success
+    Write-Host "  Clean complete." -ForegroundColor Green
 }
 
 function Enter-Shell {
@@ -383,13 +333,13 @@ function Enter-Shell {
 
     if (-not (Test-DockerRunning)) { return }
 
-    $serviceName = Get-ServiceName $Service
-    if (-not $serviceName -or $Service -eq 'all') {
-        $serviceName = 'fallout1-api'
+    $svcName = Get-ServiceName $Service
+    if (-not $svcName -or $Service -eq 'all') {
+        $svcName = 'fallout1-api'
     }
 
-    Write-Host "  Connecting to $serviceName..." -ForegroundColor $Colors.Info
-    docker exec -it $serviceName sh
+    Write-Host "  Connecting to $svcName..." -ForegroundColor Cyan
+    docker exec -it $svcName sh
 }
 
 # Main execution
