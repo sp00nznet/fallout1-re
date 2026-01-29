@@ -184,6 +184,111 @@ body {
   letter-spacing: 2px;
 }
 
+.menu-divider {
+  height: 1px;
+  background: #1a1a2e;
+  margin: 8px 0;
+}
+
+.menu-btn.logout {
+  color: #9f4a4a;
+}
+
+.menu-btn.logout:hover {
+  border-color: #9f4a4a;
+  color: #ff6b6b;
+}
+
+.mp-menu-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.mp-info {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 11px;
+  color: #555;
+  line-height: 1.6;
+}
+
+.account-status {
+  padding: 6px 12px;
+  font-size: 10px;
+}
+
+.status-offline {
+  color: #666;
+}
+
+.status-online {
+  color: #4a9f4a;
+}
+
+/* Host/Join LAN */
+.host-content, .join-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 450px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.host-form {
+  width: 100%;
+}
+
+.lan-games-panel, .manual-connect {
+  background: rgba(10, 10, 18, 0.8);
+  border: 1px solid #1a1a2e;
+  margin-top: 16px;
+}
+
+.lan-games-list {
+  min-height: 150px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.lan-game-item {
+  padding: 12px;
+  background: #0d0d1a;
+  border: 1px solid #1a1a2e;
+  margin-bottom: 6px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lan-game-item:hover {
+  border-color: #4a9f4a;
+}
+
+.lan-game-name {
+  color: #fff;
+  font-size: 13px;
+}
+
+.lan-game-info {
+  color: #4a9f4a;
+  font-size: 11px;
+}
+
+.manual-connect {
+  padding: 12px;
+}
+
+.manual-connect .panel-header {
+  border: none;
+  padding: 0 0 8px 0;
+}
+
 /* Auth Screen */
 .auth-container {
   flex: 1;

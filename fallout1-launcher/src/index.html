@@ -48,14 +48,142 @@
       </div>
     </div>
 
-    <!-- Auth Screen (Login/Register) -->
-    <div id="screen-auth" class="screen">
+    <!-- Multiplayer Menu Screen -->
+    <div id="screen-mp-menu" class="screen">
       <div class="screen-header">
-        <button class="back-btn" id="btn-auth-back">&larr; BACK</button>
+        <button class="back-btn" id="btn-mp-back">&larr; BACK</button>
         <h2>MULTIPLAYER</h2>
+        <div class="account-status" id="account-status">
+          <span class="status-offline">NOT CONNECTED</span>
+        </div>
       </div>
 
-      <div class="auth-container">
+      <div class="mp-menu-container">
+        <div class="mp-menu">
+          <button class="menu-btn" id="btn-host-lan">
+            <span class="menu-icon">&#9733;</span>
+            HOST GAME (LAN)
+          </button>
+          <button class="menu-btn" id="btn-join-lan">
+            <span class="menu-icon">&#9654;</span>
+            JOIN GAME (LAN)
+          </button>
+          <div class="menu-divider"></div>
+          <button class="menu-btn" id="btn-online-play">
+            <span class="menu-icon">&#9729;</span>
+            ONLINE PLAY
+          </button>
+        </div>
+
+        <div class="mp-info">
+          <p>LAN games do not require an account.</p>
+          <p>Online play requires connecting to a server.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Host LAN Game Screen -->
+    <div id="screen-host-lan" class="screen">
+      <div class="screen-header">
+        <button class="back-btn" id="btn-host-back">&larr; BACK</button>
+        <h2>HOST GAME</h2>
+      </div>
+
+      <div class="host-content">
+        <form id="form-host-game" class="host-form">
+          <div class="form-group">
+            <label>YOUR NAME</label>
+            <input type="text" id="host-player-name" maxlength="20" required placeholder="Vault Dweller">
+          </div>
+
+          <div class="form-group">
+            <label>GAME NAME</label>
+            <input type="text" id="host-game-name" maxlength="50" required placeholder="My Wasteland Game">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>MAX PLAYERS</label>
+              <select id="host-max-players">
+                <option value="2">2 Players</option>
+                <option value="4" selected>4 Players</option>
+                <option value="6">6 Players</option>
+                <option value="8">8 Players</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>PORT</label>
+              <input type="number" id="host-port" value="7777" min="1024" max="65535">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="host-password-enabled"> Require Password
+            </label>
+          </div>
+
+          <div class="form-group password-group" style="display:none;">
+            <label>PASSWORD</label>
+            <input type="password" id="host-password" placeholder="Enter password">
+          </div>
+
+          <button type="submit" class="btn-primary">START HOSTING</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Join LAN Game Screen -->
+    <div id="screen-join-lan" class="screen">
+      <div class="screen-header">
+        <button class="back-btn" id="btn-join-back">&larr; BACK</button>
+        <h2>JOIN GAME</h2>
+        <button class="btn-small" id="btn-lan-refresh">REFRESH</button>
+      </div>
+
+      <div class="join-content">
+        <div class="form-group">
+          <label>YOUR NAME</label>
+          <input type="text" id="join-player-name" maxlength="20" required placeholder="Vault Dweller">
+        </div>
+
+        <div class="lan-games-panel">
+          <div class="panel-header">LAN GAMES</div>
+          <div id="lan-games-list" class="lan-games-list">
+            <div class="no-games">Searching for games...</div>
+          </div>
+        </div>
+
+        <div class="manual-connect">
+          <div class="panel-header">DIRECT CONNECT</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>IP ADDRESS</label>
+              <input type="text" id="join-ip" placeholder="192.168.1.100">
+            </div>
+            <div class="form-group" style="flex:0.5;">
+              <label>PORT</label>
+              <input type="number" id="join-port" value="7777">
+            </div>
+            <div class="form-group" style="flex:0.3;">
+              <label>&nbsp;</label>
+              <button class="btn-primary" id="btn-direct-connect">CONNECT</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Online Play Screen (requires login) -->
+    <div id="screen-online" class="screen">
+      <div class="screen-header">
+        <button class="back-btn" id="btn-online-back">&larr; BACK</button>
+        <h2>ONLINE PLAY</h2>
+        <span class="user-badge" id="online-user-name" style="display:none;"></span>
+      </div>
+
+      <!-- Not logged in view -->
+      <div id="online-auth" class="auth-container">
         <div class="auth-box">
           <div class="tabs">
             <button class="tab active" data-tab="login">LOGIN</button>
@@ -98,33 +226,32 @@
           <input type="text" id="server-url" value="http://localhost:3001">
         </div>
       </div>
-    </div>
 
-    <!-- Multiplayer Menu Screen -->
-    <div id="screen-mp-menu" class="screen">
-      <div class="screen-header">
-        <button class="back-btn" id="btn-mp-logout">&larr; LOGOUT</button>
-        <h2>MULTIPLAYER</h2>
-        <span class="user-badge" id="mp-user-name"></span>
-      </div>
-
-      <div class="mp-menu">
-        <button class="menu-btn" id="btn-browse-games">
-          <span class="menu-icon">&#9776;</span>
-          BROWSE GAMES
-        </button>
-        <button class="menu-btn" id="btn-create-game">
-          <span class="menu-icon">&#10010;</span>
-          CREATE GAME
-        </button>
-        <button class="menu-btn" id="btn-quick-join">
-          <span class="menu-icon">&#9889;</span>
-          QUICK JOIN
-        </button>
-        <button class="menu-btn" id="btn-characters">
-          <span class="menu-icon">&#9787;</span>
-          CHARACTERS
-        </button>
+      <!-- Logged in view -->
+      <div id="online-menu" class="mp-menu-container" style="display:none;">
+        <div class="mp-menu">
+          <button class="menu-btn" id="btn-browse-games">
+            <span class="menu-icon">&#9776;</span>
+            BROWSE GAMES
+          </button>
+          <button class="menu-btn" id="btn-create-game">
+            <span class="menu-icon">&#10010;</span>
+            CREATE GAME
+          </button>
+          <button class="menu-btn" id="btn-quick-join">
+            <span class="menu-icon">&#9889;</span>
+            QUICK JOIN
+          </button>
+          <button class="menu-btn" id="btn-characters">
+            <span class="menu-icon">&#9787;</span>
+            CHARACTERS
+          </button>
+          <div class="menu-divider"></div>
+          <button class="menu-btn logout" id="btn-logout">
+            <span class="menu-icon">&#10140;</span>
+            LOGOUT
+          </button>
+        </div>
       </div>
     </div>
 
@@ -271,15 +398,12 @@
 
       <div class="settings-content">
         <div class="form-group">
-          <label>GAME EXECUTABLE PATH</label>
-          <div class="path-input">
-            <input type="text" id="game-path" readonly>
-            <button class="btn-small" id="btn-browse-game">BROWSE</button>
-          </div>
+          <label>PLAYER NAME (for LAN games)</label>
+          <input type="text" id="settings-player-name" placeholder="Vault Dweller">
         </div>
 
         <div class="form-group">
-          <label>MULTIPLAYER SERVER</label>
+          <label>ONLINE SERVER</label>
           <input type="text" id="settings-server" value="http://localhost:3001">
         </div>
 
