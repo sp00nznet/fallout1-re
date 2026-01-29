@@ -335,25 +335,6 @@ int GNW95_init_DirectDraw(int width, int height, int bpp)
 
         OutputDebugStringA("GNW95_init_DirectDraw: Windowed mode initialized successfully\n");
 
-        // DEBUG: Fill buffer with a test pattern to verify GDI works
-        for (int i = 0; i < width * height; i++) {
-            GNW95_WindowBuffer[i] = (unsigned char)(i % 256);
-        }
-        // Force initial draw
-        HDC hdc = GetDC(GNW95_hwnd);
-        if (hdc != NULL) {
-            int result = StretchDIBits(hdc, 0, 0, width * GNW95_WindowScale, height * GNW95_WindowScale,
-                0, 0, width, height, GNW95_WindowBuffer, GNW95_WindowBMI, DIB_RGB_COLORS, SRCCOPY);
-            ReleaseDC(GNW95_hwnd, hdc);
-            if (result == 0 || result == GDI_ERROR) {
-                OutputDebugStringA("GNW95_init_DirectDraw: StretchDIBits FAILED\n");
-            } else {
-                OutputDebugStringA("GNW95_init_DirectDraw: Test pattern drawn successfully\n");
-            }
-        } else {
-            OutputDebugStringA("GNW95_init_DirectDraw: GetDC FAILED\n");
-        }
-
         return 0;
     }
 
@@ -662,7 +643,6 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
 {
     DDSURFACEDESC ddsd;
     HRESULT hr;
-    static int showRectCallCount = 0;
 
     if (!GNW95_isActive) {
         return;
@@ -672,15 +652,6 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
         return;
     }
 
-    // Debug: Log first few calls to verify rendering is happening
-    showRectCallCount++;
-    if (showRectCallCount <= 5) {
-        char debugMsg[256];
-        wsprintfA(debugMsg, "GNW95_ShowRect call #%d: src=%p, dest=(%d,%d), size=(%d,%d)\n",
-            showRectCallCount, src, destX, destY, srcWidth, srcHeight);
-        OutputDebugStringA(debugMsg);
-    }
-
     if (GNW95_WindowBuffer != NULL && GNW95_hwnd != NULL) {
         // Bounds checking to prevent buffer overrun
         if (destX + srcWidth > (unsigned int)GNW95_WindowWidth ||
@@ -688,21 +659,20 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
             return;
         }
 
-        // GDI windowed mode: copy to back buffer, then blit to window using GDI
+        // GDI windowed mode: copy to back buffer, then blit entire buffer to window
         buf_to_buf(src + srcPitch * srcY + srcX, srcWidth, srcHeight, srcPitch,
                    GNW95_WindowBuffer + GNW95_WindowWidth * destY + destX, GNW95_WindowWidth);
 
-        // Blit the updated region to the window with scaling
+        // Blit the ENTIRE buffer to window (simpler, more reliable)
         HDC hdc = GetDC(GNW95_hwnd);
         if (hdc != NULL) {
             int scale = GNW95_WindowScale;
-            // Use StretchDIBits for all cases - it handles top-down DIBs correctly
             SetStretchBltMode(hdc, COLORONCOLOR);
             StretchDIBits(hdc,
-                destX * scale, destY * scale,           // dest x, y
-                srcWidth * scale, srcHeight * scale,    // dest width, height
-                destX, destY,                           // src x, y (top-down DIB, no flip needed)
-                srcWidth, srcHeight,                    // src width, height
+                0, 0,                                             // dest x, y
+                GNW95_WindowWidth * scale, GNW95_WindowHeight * scale,  // dest size
+                0, 0,                                             // src x, y
+                GNW95_WindowWidth, GNW95_WindowHeight,            // src size
                 GNW95_WindowBuffer,
                 GNW95_WindowBMI,
                 DIB_RGB_COLORS,
