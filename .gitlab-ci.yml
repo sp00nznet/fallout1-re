@@ -222,9 +222,6 @@ deploy-win32:
       artifacts: true
     - job: build-win32-debug
       artifacts: true
-    - job: build-launcher
-      artifacts: true
-      optional: true
   script:
     - 'net use R: \\192.168.100.22\releases gitlab /user:root'
     - '$destPath = "R:\$env:CI_PROJECT_NAME\$env:CI_COMMIT_REF_NAME"'
@@ -232,7 +229,23 @@ deploy-win32:
     - 'Copy-Item -Path "build-win32\Release\fallout-re.exe" -Destination $destPath -Force'
     - 'Copy-Item -Path "build-win32-debug\RelWithDebInfo\fallout-re.exe" -Destination "$destPath\fallout-re-debug.exe" -Force -ErrorAction SilentlyContinue'
     - 'Copy-Item -Path "build-win32-debug\RelWithDebInfo\fallout-re.pdb" -Destination $destPath -Force -ErrorAction SilentlyContinue'
-    - 'Copy-Item -Path "fallout1-launcher\dist\*.exe" -Destination $destPath -Force -ErrorAction SilentlyContinue'
+    - 'net use R: /delete'
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+
+deploy-launcher:
+  stage: deploy
+  tags:
+    - windows
+  needs:
+    - job: build-launcher
+      artifacts: true
+  script:
+    - 'net use R: \\192.168.100.22\releases gitlab /user:root'
+    - '$destPath = "R:\$env:CI_PROJECT_NAME\$env:CI_COMMIT_REF_NAME\launcher"'
+    - 'if (-not (Test-Path $destPath)) { New-Item -ItemType Directory -Path $destPath -Force }'
+    - 'Copy-Item -Path "fallout1-launcher\dist\*.exe" -Destination $destPath -Force'
     - 'net use R: /delete'
   rules:
     - if: $CI_COMMIT_TAG
