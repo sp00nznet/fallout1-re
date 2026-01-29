@@ -1,6 +1,6 @@
 // State
-let apiBase = 'http://localhost:3001';
-let wsUrl = 'ws://localhost:3001/ws';
+let apiBase = localStorage.getItem('serverUrl') || 'http://localhost:3001';
+let wsUrl = apiBase.replace('http', 'ws') + '/ws';
 let accessToken = null;
 let refreshToken = null;
 let user = null;
@@ -11,9 +11,14 @@ let selectedCharacter = null;
 
 // Elements
 const screens = {
-  login: document.getElementById('screen-login'),
-  lobby: document.getElementById('screen-lobby'),
+  menu: document.getElementById('screen-menu'),
+  auth: document.getElementById('screen-auth'),
+  mpMenu: document.getElementById('screen-mp-menu'),
+  browser: document.getElementById('screen-browser'),
+  create: document.getElementById('screen-create'),
   room: document.getElementById('screen-room'),
+  characters: document.getElementById('screen-characters'),
+  settings: document.getElementById('screen-settings'),
   ingame: document.getElementById('screen-ingame')
 };
 
@@ -23,7 +28,7 @@ const loadingText = document.getElementById('loading-text');
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
-  loadStoredAuth();
+  loadSettings();
 });
 
 function setupEventListeners() {
@@ -31,48 +36,95 @@ function setupEventListeners() {
   document.getElementById('btn-minimize').onclick = () => window.launcher.minimize();
   document.getElementById('btn-close').onclick = () => window.launcher.close();
 
-  // Tabs
+  // Main Menu
+  document.getElementById('btn-local').onclick = launchSingleplayer;
+  document.getElementById('btn-multiplayer').onclick = () => {
+    if (accessToken && user) {
+      showScreen('mpMenu');
+      document.getElementById('mp-user-name').textContent = user.username;
+    } else {
+      showScreen('auth');
+    }
+  };
+  document.getElementById('btn-settings').onclick = () => showScreen('settings');
+  document.getElementById('btn-exit').onclick = () => window.launcher.close();
+
+  // Auth Screen
+  document.getElementById('btn-auth-back').onclick = () => showScreen('menu');
   document.querySelectorAll('.tab').forEach(tab => {
     tab.onclick = () => switchTab(tab.dataset.tab);
   });
-
-  // Auth forms
   document.getElementById('form-login').onsubmit = handleLogin;
   document.getElementById('form-register').onsubmit = handleRegister;
-  document.getElementById('btn-logout').onclick = handleLogout;
-
-  // Server config
+  document.getElementById('server-url').value = apiBase;
   document.getElementById('server-url').onchange = (e) => {
     apiBase = e.target.value;
-    wsUrl = e.target.value.replace('http', 'ws') + '/ws';
+    wsUrl = apiBase.replace('http', 'ws') + '/ws';
+    localStorage.setItem('serverUrl', apiBase);
   };
 
-  // Lobby
+  // Multiplayer Menu
+  document.getElementById('btn-mp-logout').onclick = handleLogout;
+  document.getElementById('btn-browse-games').onclick = () => {
+    showScreen('browser');
+    loadGames();
+    loadCharacters();
+  };
+  document.getElementById('btn-create-game').onclick = () => {
+    showScreen('create');
+    loadCharacters();
+  };
+  document.getElementById('btn-quick-join').onclick = handleQuickJoin;
+  document.getElementById('btn-characters').onclick = () => {
+    showScreen('characters');
+    loadCharacters();
+    renderCharactersList();
+  };
+
+  // Browser Screen
+  document.getElementById('btn-browser-back').onclick = () => showScreen('mpMenu');
   document.getElementById('btn-refresh').onclick = loadGames;
-  document.getElementById('btn-create-game').onclick = () => toggleModal('modal-create', true);
-  document.getElementById('btn-cancel-create').onclick = () => toggleModal('modal-create', false);
-  document.getElementById('form-create-game').onsubmit = handleCreateGame;
   document.getElementById('btn-new-char').onclick = handleCreateCharacter;
   document.getElementById('character-select').onchange = (e) => {
     selectedCharacter = characters.find(c => c.id === e.target.value);
   };
 
-  // Room
+  // Create Game Screen
+  document.getElementById('btn-create-back').onclick = () => showScreen('mpMenu');
+  document.getElementById('form-create-game').onsubmit = handleCreateGame;
+  document.getElementById('create-visibility').onchange = (e) => {
+    document.querySelector('.password-group').style.display =
+      e.target.value === 'PRIVATE' ? 'block' : 'none';
+  };
+
+  // Room Screen
+  document.getElementById('btn-leave-room').onclick = handleLeaveGame;
   document.getElementById('btn-ready').onclick = handleToggleReady;
   document.getElementById('btn-start').onclick = handleStartGame;
-  document.getElementById('btn-leave').onclick = handleLeaveGame;
   document.getElementById('btn-send-chat').onclick = sendChat;
   document.getElementById('chat-input').onkeypress = (e) => {
     if (e.key === 'Enter') sendChat();
   };
 
+  // Characters Screen
+  document.getElementById('btn-chars-back').onclick = () => showScreen('mpMenu');
+  document.getElementById('btn-create-char').onclick = handleCreateCharacter;
+
+  // Settings Screen
+  document.getElementById('btn-settings-back').onclick = () => showScreen('menu');
+  document.getElementById('btn-save-settings').onclick = saveSettings;
+  document.getElementById('settings-server').value = apiBase;
+
   // In-game
   document.getElementById('btn-end-turn').onclick = () => sendWsMessage('turn:end', {});
-  document.getElementById('btn-menu').onclick = () => showScreen('room');
+  document.getElementById('btn-ingame-menu').onclick = () => showScreen('room');
 
   // Game events from main process
   window.launcher.onGameEvent(handleGameEvent);
   window.launcher.onGameClosed(handleGameClosed);
+
+  // Load stored auth
+  loadStoredAuth();
 }
 
 // Screen management
@@ -96,15 +148,39 @@ function switchTab(tab) {
   document.getElementById(`form-${tab}`).classList.add('active');
 }
 
-function toggleModal(id, show) {
-  document.getElementById(id).classList.toggle('active', show);
-}
-
 function showError(elementId, message) {
   const el = document.getElementById(elementId);
   el.textContent = message;
   el.classList.add('visible');
   setTimeout(() => el.classList.remove('visible'), 5000);
+}
+
+// Settings
+function loadSettings() {
+  apiBase = localStorage.getItem('serverUrl') || 'http://localhost:3001';
+  wsUrl = apiBase.replace('http', 'ws') + '/ws';
+}
+
+function saveSettings() {
+  const serverUrl = document.getElementById('settings-server').value;
+  apiBase = serverUrl;
+  wsUrl = serverUrl.replace('http', 'ws') + '/ws';
+  localStorage.setItem('serverUrl', serverUrl);
+  showScreen('menu');
+}
+
+// Singleplayer
+async function launchSingleplayer() {
+  showLoading('LAUNCHING FALLOUT...');
+  try {
+    await window.launcher.launchGame({ singleplayer: true });
+    hideLoading();
+    // Minimize launcher when game starts
+    window.launcher.minimize();
+  } catch (err) {
+    hideLoading();
+    alert('Failed to launch game: ' + err.message);
+  }
 }
 
 // Auth
@@ -114,14 +190,6 @@ function loadStoredAuth() {
   const userJson = localStorage.getItem('user');
   if (userJson) {
     try { user = JSON.parse(userJson); } catch {}
-  }
-
-  if (accessToken && user) {
-    showScreen('lobby');
-    document.getElementById('user-name').textContent = user.username;
-    loadCharacters();
-    loadGames();
-    connectWebSocket();
   }
 }
 
@@ -146,10 +214,8 @@ async function handleLogin(e) {
     const data = await res.json();
     setAuthData(data);
     hideLoading();
-    showScreen('lobby');
-    document.getElementById('user-name').textContent = user.username;
-    loadCharacters();
-    loadGames();
+    showScreen('mpMenu');
+    document.getElementById('mp-user-name').textContent = user.username;
     connectWebSocket();
   } catch (err) {
     hideLoading();
@@ -179,10 +245,8 @@ async function handleRegister(e) {
     const data = await res.json();
     setAuthData(data);
     hideLoading();
-    showScreen('lobby');
-    document.getElementById('user-name').textContent = user.username;
-    loadCharacters();
-    loadGames();
+    showScreen('mpMenu');
+    document.getElementById('mp-user-name').textContent = user.username;
     connectWebSocket();
   } catch (err) {
     hideLoading();
@@ -197,7 +261,7 @@ function handleLogout() {
   accessToken = null;
   user = null;
   if (ws) ws.close();
-  showScreen('login');
+  showScreen('menu');
 }
 
 function setAuthData(data) {
@@ -237,7 +301,10 @@ function connectWebSocket() {
 
   ws.onclose = () => {
     console.log('WebSocket disconnected');
-    setTimeout(connectWebSocket, 3000);
+    // Reconnect if still authenticated
+    if (accessToken) {
+      setTimeout(connectWebSocket, 3000);
+    }
   };
 
   ws.onerror = (err) => {
@@ -279,7 +346,7 @@ function handleWsMessage(msg) {
 
     case 'session:started':
       hideLoading();
-      launchGame();
+      launchMultiplayer();
       break;
 
     case 'chat:message':
@@ -304,14 +371,16 @@ async function loadGames() {
     renderGamesList(games);
   } catch (err) {
     console.error('Failed to load games:', err);
+    document.getElementById('games-list').innerHTML =
+      '<div class="no-games">Failed to load games</div>';
   }
 }
 
 function renderGamesList(games) {
   const list = document.getElementById('games-list');
 
-  if (games.length === 0) {
-    list.innerHTML = '<div style="padding:20px;text-align:center;color:#666;">No games available</div>';
+  if (!games || games.length === 0) {
+    list.innerHTML = '<div class="no-games">No games available.<br>Create one or wait for others.</div>';
     return;
   }
 
@@ -322,7 +391,7 @@ function renderGamesList(games) {
         <span class="game-item-players">${game._count?.participants || game.participants?.length || 0}/${game.maxPlayers}</span>
       </div>
       <div class="game-item-info">
-        Host: ${escapeHtml(game.host.username)} | Level ${game.minLevel}-${game.maxLevel} | ${game.status}
+        Host: ${escapeHtml(game.host?.username || 'Unknown')} | Level ${game.minLevel}-${game.maxLevel} | ${game.status}
       </div>
     </div>
   `).join('');
@@ -335,8 +404,15 @@ async function handleCreateGame(e) {
     name: document.getElementById('create-name').value,
     maxPlayers: parseInt(document.getElementById('create-max-players').value),
     turnTimeBase: parseInt(document.getElementById('create-turn-time').value),
+    minLevel: parseInt(document.getElementById('create-min-level').value),
+    maxLevel: parseInt(document.getElementById('create-max-level').value),
+    visibility: document.getElementById('create-visibility').value,
     characterId: selectedCharacter?.id
   };
+
+  if (options.visibility === 'PRIVATE') {
+    options.password = document.getElementById('create-password').value;
+  }
 
   showLoading('CREATING GAME...');
   try {
@@ -349,10 +425,7 @@ async function handleCreateGame(e) {
     if (!res.ok) throw new Error('Failed to create game');
 
     const game = await res.json();
-    toggleModal('modal-create', false);
     hideLoading();
-
-    // Join via WebSocket
     sendWsMessage('session:join', { gameId: game.id });
   } catch (err) {
     hideLoading();
@@ -379,6 +452,32 @@ window.joinGame = async function(gameId) {
   }
 };
 
+async function handleQuickJoin() {
+  showLoading('FINDING GAME...');
+  try {
+    const res = await fetch(`${apiBase}/api/games`);
+    const games = await res.json();
+
+    const available = games.filter(g =>
+      g.status === 'LOBBY' &&
+      (g._count?.participants || g.participants?.length || 0) < g.maxPlayers
+    );
+
+    if (available.length === 0) {
+      hideLoading();
+      alert('No games available. Create one!');
+      return;
+    }
+
+    // Join first available
+    hideLoading();
+    window.joinGame(available[0].id);
+  } catch (err) {
+    hideLoading();
+    alert('Failed to find games');
+  }
+}
+
 async function loadGameDetails(gameId) {
   try {
     const res = await fetch(`${apiBase}/api/games/${gameId}`);
@@ -394,20 +493,21 @@ function updateRoomUI() {
 
   document.getElementById('room-name').textContent = currentGame.name;
   document.getElementById('room-status').textContent = currentGame.status;
-  document.getElementById('room-players').textContent = `${currentGame.participants.length}/${currentGame.maxPlayers}`;
+  document.getElementById('room-players').textContent =
+    `${currentGame.participants?.length || 0}/${currentGame.maxPlayers}`;
 
   const isHost = currentGame.hostId === user?.id;
-  const allReady = currentGame.participants.every(p => p.isReady || p.isHost);
+  const allReady = currentGame.participants?.every(p => p.isReady || p.isHost);
 
   document.getElementById('btn-start').style.display = isHost ? 'block' : 'none';
-  document.getElementById('btn-start').disabled = !allReady || currentGame.participants.length < 2;
+  document.getElementById('btn-start').disabled = !allReady || (currentGame.participants?.length || 0) < 2;
 
   const playersList = document.getElementById('players-list');
-  playersList.innerHTML = currentGame.participants.map(p => `
+  playersList.innerHTML = (currentGame.participants || []).map(p => `
     <li class="player-item ${p.isReady ? 'ready' : ''} ${p.isHost ? 'host' : ''}">
       <span class="player-name">${escapeHtml(p.character?.name || p.username || 'Unknown')}</span>
-      ${p.isHost ? '<span class="player-badge">HOST</span>' : ''}
-      ${p.isReady ? '<span class="player-badge" style="background:#4a9f4a">READY</span>' : ''}
+      ${p.isHost ? '<span class="player-badge" style="background:#9f9f4a">HOST</span>' : ''}
+      ${p.isReady ? '<span class="player-badge">READY</span>' : ''}
     </li>
   `).join('');
 }
@@ -428,13 +528,15 @@ async function handleStartGame() {
 
 async function handleLeaveGame() {
   try {
-    await fetchWithAuth(`${apiBase}/api/games/${currentGame.id}/leave`, { method: 'POST' });
-    sendWsMessage('session:leave', {});
+    if (currentGame) {
+      await fetchWithAuth(`${apiBase}/api/games/${currentGame.id}/leave`, { method: 'POST' });
+      sendWsMessage('session:leave', {});
+    }
     currentGame = null;
-    showScreen('lobby');
-    loadGames();
+    showScreen('mpMenu');
   } catch (err) {
     console.error('Failed to leave game:', err);
+    showScreen('mpMenu');
   }
 }
 
@@ -442,8 +544,10 @@ async function handleLeaveGame() {
 async function loadCharacters() {
   try {
     const res = await fetchWithAuth(`${apiBase}/api/users/me/characters`);
-    characters = await res.json();
-    renderCharacterSelect();
+    if (res.ok) {
+      characters = await res.json();
+      renderCharacterSelect();
+    }
   } catch (err) {
     console.error('Failed to load characters:', err);
   }
@@ -451,8 +555,8 @@ async function loadCharacters() {
 
 function renderCharacterSelect() {
   const select = document.getElementById('character-select');
-  if (characters.length === 0) {
-    select.innerHTML = '<option value="">No characters - create one</option>';
+  if (!characters || characters.length === 0) {
+    select.innerHTML = '<option value="">No characters</option>';
     selectedCharacter = null;
   } else {
     select.innerHTML = characters.map(c =>
@@ -460,6 +564,21 @@ function renderCharacterSelect() {
     ).join('');
     selectedCharacter = characters[0];
   }
+}
+
+function renderCharactersList() {
+  const list = document.getElementById('characters-list');
+  if (!characters || characters.length === 0) {
+    list.innerHTML = '<div class="no-games">No characters yet.<br>Create your first character!</div>';
+    return;
+  }
+
+  list.innerHTML = characters.map(c => `
+    <div class="character-item">
+      <span class="character-name">${escapeHtml(c.name)}</span>
+      <span class="character-level">Level ${c.level}</span>
+    </div>
+  `).join('');
 }
 
 async function handleCreateCharacter() {
@@ -478,8 +597,8 @@ async function handleCreateCharacter() {
     const char = await res.json();
     characters.push(char);
     renderCharacterSelect();
+    renderCharactersList();
     selectedCharacter = char;
-    document.getElementById('character-select').value = char.id;
   } catch (err) {
     alert(err.message);
   }
@@ -505,13 +624,14 @@ function addChatMessage(sender, message, isSystem = false) {
 }
 
 // Game launch
-async function launchGame() {
-  const myParticipant = currentGame.participants.find(p => p.userId === user.id);
+async function launchMultiplayer() {
+  const myParticipant = currentGame?.participants?.find(p => p.userId === user.id);
 
   showLoading('LAUNCHING FALLOUT...');
 
   try {
     await window.launcher.launchGame({
+      singleplayer: false,
       sessionId: currentGame.id,
       participantId: myParticipant?.id
     });
@@ -527,7 +647,6 @@ async function launchGame() {
 
 function handleGameEvent(event) {
   console.log('Game event:', event);
-  // Forward to server or update UI
   if (event.type === 'action') {
     sendWsMessage('action:' + event.action, event.data);
   }
@@ -535,13 +654,19 @@ function handleGameEvent(event) {
 
 function handleGameClosed(data) {
   console.log('Game closed:', data);
-  showScreen('room');
+  if (currentGame) {
+    showScreen('room');
+  } else {
+    showScreen('menu');
+  }
 }
 
 function updateTurnUI(turnData) {
-  const isMyTurn = turnData.participantId === currentGame?.participants?.find(p => p.userId === user.id)?.id;
-  document.getElementById('ingame-turn').textContent = isMyTurn ? 'YOUR TURN' : `${turnData.playerName}'s turn`;
-  document.getElementById('ingame-timer').textContent = turnData.timeLimit + 's';
+  const isMyTurn = turnData.participantId ===
+    currentGame?.participants?.find(p => p.userId === user.id)?.id;
+  document.getElementById('ingame-turn').textContent =
+    isMyTurn ? 'YOUR TURN' : `${turnData.playerName || 'Unknown'}'s turn`;
+  document.getElementById('ingame-timer').textContent = (turnData.timeLimit || 30) + 's';
 }
 
 function formatCombatResult(data) {
@@ -554,6 +679,7 @@ function formatCombatResult(data) {
 
 // Utilities
 function escapeHtml(text) {
+  if (!text) return '';
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;

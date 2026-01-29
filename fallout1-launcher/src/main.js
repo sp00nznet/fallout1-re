@@ -107,20 +107,30 @@ async function launchGame(sessionInfo) {
 
   console.log('Launching game from:', gamePath);
 
-  // Set up IPC server before launching
-  try {
-    await createIPCServer();
-  } catch (e) {
-    console.error('Failed to create IPC server:', e);
+  let args = [];
+
+  if (sessionInfo.singleplayer) {
+    // Singleplayer mode - no IPC needed
+    console.log('Launching in singleplayer mode');
+  } else {
+    // Multiplayer mode - set up IPC
+    console.log('Launching in multiplayer mode');
+    try {
+      await createIPCServer();
+    } catch (e) {
+      console.error('Failed to create IPC server:', e);
+    }
+
+    args = [
+      '-multiplayer',
+      '-pipe', PIPE_NAME,
+      '-session', sessionInfo.sessionId,
+      '-player', sessionInfo.participantId
+    ];
   }
 
-  // Launch game with multiplayer flags
-  gameProcess = spawn(gamePath, [
-    '-multiplayer',
-    '-pipe', PIPE_NAME,
-    '-session', sessionInfo.sessionId,
-    '-player', sessionInfo.participantId
-  ], {
+  // Launch game
+  gameProcess = spawn(gamePath, args, {
     cwd: path.dirname(gamePath),
     stdio: 'pipe'
   });
