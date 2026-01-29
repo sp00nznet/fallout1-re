@@ -194,39 +194,25 @@ package-release:
     - if: $CI_COMMIT_BRANCH == "main"
 
 # ============================================================================
-# Deploy Stage (Manual)
+# Deploy Stage
 # ============================================================================
-deploy-staging:
+deploy-win32:
   stage: deploy
   tags:
-    - debian
+    - windows
   needs:
-    - job: package-release
+    - job: build-win32
+      artifacts: true
+    - job: build-win32-debug
       artifacts: true
   script:
-    - echo "Deploying to staging environment..."
-    - echo "Release artifact ready at fallout1-re-${CI_COMMIT_SHORT_SHA}.zip"
-    - ls -la fallout1-re-*.zip
-  environment:
-    name: staging
-    url: https://staging.fallout1-mp.example.com
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: manual
-
-deploy-production:
-  stage: deploy
-  tags:
-    - debian
-  needs:
-    - job: package-release
-      artifacts: true
-  script:
-    - echo "Deploying to production environment..."
-    - ls -la fallout1-re-*.zip
-  environment:
-    name: production
-    url: https://fallout1-mp.example.com
+    - 'net use R: \\192.168.100.22\releases gitlab /user:root'
+    - '$destPath = "R:\$env:CI_PROJECT_NAME\$env:CI_COMMIT_REF_NAME"'
+    - 'if (-not (Test-Path $destPath)) { New-Item -ItemType Directory -Path $destPath -Force }'
+    - 'Copy-Item -Path "build-win32\Release\fallout-re.exe" -Destination $destPath -Force'
+    - 'Copy-Item -Path "build-win32-debug\RelWithDebInfo\fallout-re.exe" -Destination "$destPath\fallout-re-debug.exe" -Force -ErrorAction SilentlyContinue'
+    - 'Copy-Item -Path "build-win32-debug\RelWithDebInfo\fallout-re.pdb" -Destination $destPath -Force -ErrorAction SilentlyContinue'
+    - 'net use R: /delete'
   rules:
     - if: $CI_COMMIT_TAG
-      when: manual
+    - if: $CI_COMMIT_BRANCH == "main"
