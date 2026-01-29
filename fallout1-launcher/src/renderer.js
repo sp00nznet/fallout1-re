@@ -44,9 +44,10 @@ function setupEventListeners() {
   // Main Menu
   document.getElementById('btn-local').onclick = launchSingleplayer;
   document.getElementById('btn-multiplayer').onclick = () => showScreen('mpMenu');
-  document.getElementById('btn-settings').onclick = () => {
+  document.getElementById('btn-settings').onclick = async () => {
     document.getElementById('settings-player-name').value = playerName;
     document.getElementById('settings-server').value = apiBase;
+    await updateGamePathStatus();
     showScreen('settings');
   };
   document.getElementById('btn-exit').onclick = () => window.launcher.close();
@@ -146,6 +147,7 @@ function setupEventListeners() {
   // Settings Screen
   document.getElementById('btn-settings-back').onclick = () => showScreen('menu');
   document.getElementById('btn-save-settings').onclick = saveSettings;
+  document.getElementById('btn-browse-game').onclick = browseGamePath;
 
   // In-game
   document.getElementById('btn-end-turn').onclick = () => sendWsMessage('turn:end', {});
@@ -154,6 +156,12 @@ function setupEventListeners() {
   // Game events from main process
   window.launcher.onGameEvent(handleGameEvent);
   window.launcher.onGameClosed(handleGameClosed);
+  window.launcher.onGameError(handleGameError);
+}
+
+function handleGameError(data) {
+  hideLoading();
+  alert('Game error: ' + data.error);
 }
 
 // Screen management
@@ -185,10 +193,47 @@ function showError(elementId, message) {
 }
 
 // Settings
-function loadSettings() {
+async function loadSettings() {
   apiBase = localStorage.getItem('serverUrl') || 'http://localhost:3001';
   wsUrl = apiBase.replace('http', 'ws') + '/ws';
   playerName = localStorage.getItem('playerName') || 'Vault Dweller';
+
+  // Check game path on startup
+  updateGamePathStatus();
+}
+
+async function updateGamePathStatus() {
+  try {
+    const gamePath = await window.launcher.getGamePath();
+    const pathInput = document.getElementById('settings-game-path');
+    const statusEl = document.getElementById('game-path-status');
+
+    if (gamePath) {
+      pathInput.value = gamePath;
+      statusEl.textContent = 'Game found';
+      statusEl.style.color = '#4a9f4a';
+    } else {
+      pathInput.value = '';
+      pathInput.placeholder = 'Game not found - click Browse';
+      statusEl.textContent = 'Please locate fallout-re.exe';
+      statusEl.style.color = '#9f4a4a';
+    }
+  } catch (err) {
+    console.error('Failed to get game path:', err);
+  }
+}
+
+async function browseGamePath() {
+  try {
+    const gamePath = await window.launcher.browseGamePath();
+    if (gamePath) {
+      document.getElementById('settings-game-path').value = gamePath;
+      document.getElementById('game-path-status').textContent = 'Game path saved';
+      document.getElementById('game-path-status').style.color = '#4a9f4a';
+    }
+  } catch (err) {
+    console.error('Failed to browse game path:', err);
+  }
 }
 
 function saveSettings() {

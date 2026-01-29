@@ -403,6 +403,15 @@
         </div>
 
         <div class="form-group">
+          <label>GAME EXECUTABLE</label>
+          <div class="form-row">
+            <input type="text" id="settings-game-path" placeholder="Auto-detect" readonly style="flex:1;">
+            <button class="btn-small" id="btn-browse-game" style="margin-left:10px;">BROWSE</button>
+          </div>
+          <small id="game-path-status" class="form-hint"></small>
+        </div>
+
+        <div class="form-group">
           <label>ONLINE SERVER</label>
           <input type="text" id="settings-server" value="http://localhost:3001">
         </div>

@@ -371,6 +371,13 @@ body {
   color: #333;
 }
 
+.form-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #666;
+}
+
 .form-row {
   display: flex;
   gap: 16px;

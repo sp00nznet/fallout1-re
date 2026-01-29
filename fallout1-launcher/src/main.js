@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const net = require('net');
 
@@ -7,9 +8,66 @@ let mainWindow = null;
 let gameProcess = null;
 let ipcServer = null;
 let gameSocket = null;
+let settings = {};
 
 // IPC pipe name for communication with game
 const PIPE_NAME = '\\\\.\\pipe\\fallout1mp';
+
+// Settings file path
+const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+
+function loadSettings() {
+  try {
+    if (fs.existsSync(settingsPath)) {
+      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Failed to load settings:', e);
+    settings = {};
+  }
+  return settings;
+}
+
+function saveSettings(newSettings) {
+  settings = { ...settings, ...newSettings };
+  try {
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+  } catch (e) {
+    console.error('Failed to save settings:', e);
+  }
+}
+
+// Find game executable in multiple possible locations
+function findGamePath() {
+  // If user has configured a custom path, use that first
+  if (settings.gamePath && fs.existsSync(settings.gamePath)) {
+    return settings.gamePath;
+  }
+
+  const possiblePaths = [
+    // Same directory as launcher
+    path.join(path.dirname(app.getPath('exe')), 'fallout-re.exe'),
+    path.join(path.dirname(app.getPath('exe')), 'game', 'fallout-re.exe'),
+    // Resources directory (packaged app)
+    app.isPackaged ? path.join(process.resourcesPath, 'game', 'fallout-re.exe') : null,
+    app.isPackaged ? path.join(process.resourcesPath, 'fallout-re.exe') : null,
+    // Development paths
+    path.join(__dirname, '..', '..', 'build-win32', 'Release', 'fallout-re.exe'),
+    path.join(__dirname, '..', '..', 'build', 'Release', 'fallout-re.exe'),
+    // Common install locations
+    path.join(app.getPath('userData'), '..', 'Fallout1-RE', 'fallout-re.exe'),
+  ].filter(Boolean);
+
+  for (const p of possiblePaths) {
+    console.log('Checking game path:', p);
+    if (fs.existsSync(p)) {
+      console.log('Found game at:', p);
+      return p;
+    }
+  }
+
+  return null;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -101,9 +159,11 @@ function sendToGame(message) {
 
 // Launch the game executable
 async function launchGame(sessionInfo) {
-  const gamePath = app.isPackaged
-    ? path.join(process.resourcesPath, 'game', 'fallout-re.exe')
-    : path.join(__dirname, '..', '..', 'build-win32', 'Release', 'fallout-re.exe');
+  const gamePath = findGamePath();
+
+  if (!gamePath) {
+    throw new Error('Game executable not found. Please configure the game path in Settings.');
+  }
 
   console.log('Launching game from:', gamePath);
 
@@ -143,6 +203,13 @@ async function launchGame(sessionInfo) {
     console.error('[Game Error]', data.toString());
   });
 
+  gameProcess.on('error', (err) => {
+    console.error('Failed to start game:', err);
+    if (mainWindow) {
+      mainWindow.webContents.send('game-error', { error: err.message });
+    }
+  });
+
   gameProcess.on('close', (code) => {
     console.log('Game exited with code:', code);
     gameProcess = null;
@@ -155,7 +222,7 @@ async function launchGame(sessionInfo) {
     }
   });
 
-  return true;
+  return { success: true, gamePath };
 }
 
 function stopGame() {
@@ -171,7 +238,11 @@ function stopGame() {
 
 // IPC handlers from renderer
 ipcMain.handle('launch-game', async (event, sessionInfo) => {
-  return await launchGame(sessionInfo);
+  try {
+    return await launchGame(sessionInfo);
+  } catch (err) {
+    throw err;
+  }
 });
 
 ipcMain.handle('stop-game', () => {
@@ -191,6 +262,34 @@ ipcMain.handle('get-game-status', () => {
   };
 });
 
+ipcMain.handle('get-game-path', () => {
+  return findGamePath();
+});
+
+ipcMain.handle('browse-game-path', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Fallout Game Executable',
+    filters: [{ name: 'Executable', extensions: ['exe'] }],
+    properties: ['openFile']
+  });
+
+  if (!result.canceled && result.filePaths.length > 0) {
+    const gamePath = result.filePaths[0];
+    saveSettings({ gamePath });
+    return gamePath;
+  }
+  return null;
+});
+
+ipcMain.handle('get-settings', () => {
+  return settings;
+});
+
+ipcMain.handle('save-settings', (event, newSettings) => {
+  saveSettings(newSettings);
+  return true;
+});
+
 ipcMain.handle('minimize-window', () => {
   mainWindow?.minimize();
 });
@@ -199,7 +298,10 @@ ipcMain.handle('close-window', () => {
   mainWindow?.close();
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  loadSettings();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   stopGame();
