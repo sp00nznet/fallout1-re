@@ -14,7 +14,7 @@ export class GameBrowser {
   private container: HTMLDivElement;
   private games: GameSession[] = [];
   private characters: Character[] = [];
-  private selectedCharacter: Character | null = null;
+  private selectedCharacter: Character | null | undefined = null;
   private onJoinGame: (gameId: string) => void;
   private onBack: () => void;
   private refreshInterval: number | null = null;

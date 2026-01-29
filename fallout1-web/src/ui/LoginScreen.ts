@@ -21,7 +21,9 @@ export class LoginScreen {
 
   constructor(options: LoginScreenOptions) {
     this.onSuccess = options.onSuccess;
-    this.onCancel = options.onCancel;
+    if (options.onCancel) {
+      this.onCancel = options.onCancel;
+    }
     this.container = document.createElement('div');
     this.container.className = 'login-screen';
     this.render();

@@ -106,7 +106,7 @@ export class MultiplayerClient {
     }
 
     return new Promise((resolve, reject) => {
-      const handleAuth = (data: any) => {
+      const handleAuth = (_data: unknown) => {
         this.off('auth:success', handleAuth);
         this.off('auth:error', handleAuthError);
 

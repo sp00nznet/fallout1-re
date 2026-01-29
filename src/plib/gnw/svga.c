@@ -333,6 +333,27 @@ int GNW95_init_DirectDraw(int width, int height, int bpp)
         GNW95_WindowWidth = width;
         GNW95_WindowHeight = height;
 
+        OutputDebugStringA("GNW95_init_DirectDraw: Windowed mode initialized successfully\n");
+
+        // DEBUG: Fill buffer with a test pattern to verify GDI works
+        for (int i = 0; i < width * height; i++) {
+            GNW95_WindowBuffer[i] = (unsigned char)(i % 256);
+        }
+        // Force initial draw
+        HDC hdc = GetDC(GNW95_hwnd);
+        if (hdc != NULL) {
+            int result = StretchDIBits(hdc, 0, 0, width * GNW95_WindowScale, height * GNW95_WindowScale,
+                0, 0, width, height, GNW95_WindowBuffer, GNW95_WindowBMI, DIB_RGB_COLORS, SRCCOPY);
+            ReleaseDC(GNW95_hwnd, hdc);
+            if (result == 0 || result == GDI_ERROR) {
+                OutputDebugStringA("GNW95_init_DirectDraw: StretchDIBits FAILED\n");
+            } else {
+                OutputDebugStringA("GNW95_init_DirectDraw: Test pattern drawn successfully\n");
+            }
+        } else {
+            OutputDebugStringA("GNW95_init_DirectDraw: GetDC FAILED\n");
+        }
+
         return 0;
     }
 
@@ -641,6 +662,7 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
 {
     DDSURFACEDESC ddsd;
     HRESULT hr;
+    static int showRectCallCount = 0;
 
     if (!GNW95_isActive) {
         return;
@@ -648,6 +670,15 @@ void GNW95_ShowRect(unsigned char* src, unsigned int srcPitch, unsigned int a3, 
 
     if (src == NULL) {
         return;
+    }
+
+    // Debug: Log first few calls to verify rendering is happening
+    showRectCallCount++;
+    if (showRectCallCount <= 5) {
+        char debugMsg[256];
+        wsprintfA(debugMsg, "GNW95_ShowRect call #%d: src=%p, dest=(%d,%d), size=(%d,%d)\n",
+            showRectCallCount, src, destX, destY, srcWidth, srcHeight);
+        OutputDebugStringA(debugMsg);
     }
 
     if (GNW95_WindowBuffer != NULL && GNW95_hwnd != NULL) {

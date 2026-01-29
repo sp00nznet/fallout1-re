@@ -123,9 +123,11 @@ export class StateSync {
       const index = this.state.participants.findIndex(p => p.userId === data.userId);
       if (index >= 0) {
         const participant = this.state.participants[index];
-        this.state.participants.splice(index, 1);
-        this.notifyParticipantChange(participant, 'left');
-        this.notifyStateChange();
+        if (participant) {
+          this.state.participants.splice(index, 1);
+          this.notifyParticipantChange(participant, 'left');
+          this.notifyStateChange();
+        }
       }
     });
 
@@ -160,7 +162,7 @@ export class StateSync {
       this.notifyTurnChange();
     });
 
-    multiplayerClient.on('turn:end', (data) => {
+    multiplayerClient.on('turn:end', (_data: unknown) => {
       if (!this.state?.turnInfo) return;
 
       // Turn info will be updated by next turn:start

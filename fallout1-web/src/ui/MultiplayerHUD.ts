@@ -4,7 +4,6 @@
 
 import { stateSync, GameState, ParticipantState, TurnInfo } from '../multiplayer/StateSync.js';
 import { multiplayerClient } from '../multiplayer/MultiplayerClient.js';
-import { authService } from '../services/AuthService.js';
 
 interface MultiplayerHUDOptions {
   localParticipantId: string;
@@ -22,7 +21,9 @@ export class MultiplayerHUD {
 
   constructor(options: MultiplayerHUDOptions) {
     this.localParticipantId = options.localParticipantId;
-    this.onTargetSelect = options.onTargetSelect;
+    if (options.onTargetSelect) {
+      this.onTargetSelect = options.onTargetSelect;
+    }
     this.container = document.createElement('div');
     this.container.className = 'multiplayer-hud';
     this.setupListeners();
@@ -46,7 +47,7 @@ export class MultiplayerHUD {
 
   private setupListeners(): void {
     // State changes
-    const unsubState = stateSync.onStateChange((state) => {
+    const unsubState = stateSync.onStateChange((_state) => {
       this.render();
     });
     this.unsubscribers.push(unsubState);

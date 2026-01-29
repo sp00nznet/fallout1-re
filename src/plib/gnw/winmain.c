@@ -46,12 +46,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
 {
     DOSCmdLine args;
 
+    OutputDebugStringA("WinMain: Starting\n");
+
     GNW95_mutex = CreateMutexA(0, TRUE, "GNW95MUTEX");
     if (GetLastError() == ERROR_SUCCESS) {
         ShowCursor(FALSE);
         if (InitClass(hInstance)) {
+            OutputDebugStringA("WinMain: InitClass succeeded\n");
             if (InitInstance(hInstance, nCmdShow)) {
+                OutputDebugStringA("WinMain: InitInstance succeeded\n");
                 if (LoadDirectX()) {
+                    OutputDebugStringA("WinMain: LoadDirectX succeeded\n");
                     GNW95_hInstance = hInstance;
                     GNW95_lpszCmdLine = lpszCmdLine;
                     GNW95_nCmdShow = nCmdShow;
@@ -61,7 +66,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpszCmdLi
                         signal(3, SignalHandler);
                         signal(5, SignalHandler);
                         GNW95_isActive = TRUE;
+                        OutputDebugStringA("WinMain: Calling gnw_main\n");
                         gnw_main(args.numArgs, args.args);
+                        OutputDebugStringA("WinMain: gnw_main returned\n");
                         DOSCmdLineDestroy(&args);
                         return 1;
                     }

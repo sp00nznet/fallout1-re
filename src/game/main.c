@@ -1,5 +1,8 @@
 #include "main.h"
 
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
 // NOTE: Actual file name is unknown. Functions in this module do not present
 // in debug symbols from `mapper2.exe`. In OS X binary these functions appear
 // very far from the ones found in `mainmenu.c`, implying they are in separate
@@ -85,16 +88,24 @@ static bool main_death_voiceover_done;
 // 0x4725E8
 int gnw_main(int argc, char** argv)
 {
+    OutputDebugStringA("gnw_main: Starting\n");
+
     if (!autorun_mutex_create()) {
+        OutputDebugStringA("gnw_main: autorun_mutex_create failed\n");
         return 1;
     }
 
+    OutputDebugStringA("gnw_main: Calling main_init_system\n");
     if (!main_init_system(argc, argv)) {
+        OutputDebugStringA("gnw_main: main_init_system failed\n");
         return 1;
     }
 
+    OutputDebugStringA("gnw_main: main_init_system succeeded, playing IPLOGO movie\n");
     gmovie_play(MOVIE_IPLOGO, GAME_MOVIE_FADE_IN);
+    OutputDebugStringA("gnw_main: IPLOGO movie done, playing INTRO movie\n");
     gmovie_play(MOVIE_INTRO, 0);
+    OutputDebugStringA("gnw_main: INTRO movie done\n");
 
     if (main_menu_create() == 0) {
         int language_filter = 1;
