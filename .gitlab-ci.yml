@@ -13,17 +13,45 @@ variables:
 # ============================================================================
 # Win32 Game Client Build
 # ============================================================================
-build-win32:
-  stage: build
+
+# Common Windows build template
+.windows-build:
   tags:
     - windows
     - shell
+  before_script:
+    # Add CMake to PATH - try common installation paths
+    - |
+      $cmakePaths = @(
+        "C:\Program Files\CMake\bin",
+        "C:\Program Files (x86)\CMake\bin",
+        "C:\ProgramData\chocolatey\bin"
+      )
+      foreach ($path in $cmakePaths) {
+        if (Test-Path "$path\cmake.exe") {
+          $env:Path = "$path;$env:Path"
+          Write-Host "Found CMake at $path"
+          break
+        }
+      }
+    # If CMake still not found, install via Chocolatey
+    - |
+      if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
+        Write-Host "CMake not found, installing via Chocolatey..."
+        choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y --no-progress
+        $env:Path = "C:\Program Files\CMake\bin;$env:Path"
+      }
+    - cmake --version
+
+build-win32:
+  extends: .windows-build
+  stage: build
   variables:
     CMAKE_BUILD_TYPE: Release
   script:
-    - echo "Configuring CMake for Win32..."
+    - Write-Host "Configuring CMake for Win32..."
     - cmake -B build-win32 -G "Visual Studio 17 2022" -A Win32
-    - echo "Building Win32 Release..."
+    - Write-Host "Building Win32 Release..."
     - cmake --build build-win32 --config Release --parallel
   artifacts:
     name: "fallout1-re-win32-${CI_COMMIT_SHORT_SHA}"
@@ -39,10 +67,8 @@ build-win32:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
 build-win32-debug:
+  extends: .windows-build
   stage: build
-  tags:
-    - windows
-    - shell
   script:
     - cmake -B build-win32-debug -G "Visual Studio 17 2022" -A Win32
     - cmake --build build-win32-debug --config RelWithDebInfo --parallel
