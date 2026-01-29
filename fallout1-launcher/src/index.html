@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' ws: wss: http: https:; style-src 'self' 'unsafe-inline';">
+  <title>Fallout 1 Multiplayer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="titlebar">
+    <div class="titlebar-title">FALLOUT MULTIPLAYER</div>
+    <div class="titlebar-controls">
+      <button class="titlebar-btn" id="btn-minimize">─</button>
+      <button class="titlebar-btn close" id="btn-close">×</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Login Screen -->
+    <div id="screen-login" class="screen active">
+      <div class="logo">
+        <h1>FALLOUT</h1>
+        <h2>MULTIPLAYER</h2>
+      </div>
+
+      <div class="login-box">
+        <div class="tabs">
+          <button class="tab active" data-tab="login">LOGIN</button>
+          <button class="tab" data-tab="register">REGISTER</button>
+        </div>
+
+        <form id="form-login" class="tab-content active">
+          <div class="form-group">
+            <label>EMAIL</label>
+            <input type="email" id="login-email" required>
+          </div>
+          <div class="form-group">
+            <label>PASSWORD</label>
+            <input type="password" id="login-password" required>
+          </div>
+          <button type="submit" class="btn-primary">ENTER THE WASTELAND</button>
+        </form>
+
+        <form id="form-register" class="tab-content">
+          <div class="form-group">
+            <label>USERNAME</label>
+            <input type="text" id="reg-username" pattern="[a-zA-Z0-9_]{3,20}" required>
+          </div>
+          <div class="form-group">
+            <label>EMAIL</label>
+            <input type="email" id="reg-email" required>
+          </div>
+          <div class="form-group">
+            <label>PASSWORD</label>
+            <input type="password" id="reg-password" minlength="8" required>
+          </div>
+          <button type="submit" class="btn-primary">CREATE ACCOUNT</button>
+        </form>
+
+        <div id="auth-error" class="error-message"></div>
+      </div>
+
+      <div class="server-config">
+        <label>SERVER:</label>
+        <input type="text" id="server-url" value="http://localhost:3001" placeholder="http://localhost:3001">
+      </div>
+    </div>
+
+    <!-- Lobby Screen -->
+    <div id="screen-lobby" class="screen">
+      <div class="lobby-header">
+        <h2>GAME BROWSER</h2>
+        <div class="user-info">
+          <span id="user-name"></span>
+          <button class="btn-small" id="btn-logout">LOGOUT</button>
+        </div>
+      </div>
+
+      <div class="lobby-content">
+        <div class="games-panel">
+          <div class="panel-header">
+            <span>AVAILABLE GAMES</span>
+            <button class="btn-small" id="btn-refresh">REFRESH</button>
+          </div>
+          <div id="games-list" class="games-list"></div>
+        </div>
+
+        <div class="actions-panel">
+          <button class="btn-primary" id="btn-create-game">CREATE GAME</button>
+          <button class="btn-secondary" id="btn-quick-join">QUICK JOIN</button>
+        </div>
+
+        <div class="character-panel">
+          <div class="panel-header">YOUR CHARACTER</div>
+          <select id="character-select"></select>
+          <button class="btn-small" id="btn-new-char">+ NEW</button>
+        </div>
+      </div>
+
+      <!-- Create Game Modal -->
+      <div id="modal-create" class="modal">
+        <div class="modal-content">
+          <h3>CREATE GAME</h3>
+          <form id="form-create-game">
+            <div class="form-group">
+              <label>GAME NAME</label>
+              <input type="text" id="create-name" maxlength="50" required>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>MAX PLAYERS</label>
+                <select id="create-max-players">
+                  <option value="2">2</option>
+                  <option value="4" selected>4</option>
+                  <option value="6">6</option>
+                  <option value="8">8</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>TURN TIME</label>
+                <select id="create-turn-time">
+                  <option value="30" selected>30s</option>
+                  <option value="45">45s</option>
+                  <option value="60">60s</option>
+                </select>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn-secondary" id="btn-cancel-create">CANCEL</button>
+              <button type="submit" class="btn-primary">CREATE</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Room Screen -->
+    <div id="screen-room" class="screen">
+      <div class="room-header">
+        <h2 id="room-name">GAME LOBBY</h2>
+        <div class="room-info">
+          <span id="room-status">WAITING</span>
+          <span id="room-players">0/4</span>
+        </div>
+      </div>
+
+      <div class="room-content">
+        <div class="players-panel">
+          <div class="panel-header">PLAYERS</div>
+          <ul id="players-list" class="players-list"></ul>
+        </div>
+
+        <div class="room-actions">
+          <button class="btn-primary" id="btn-ready">READY</button>
+          <button class="btn-primary" id="btn-start" style="display:none;">START GAME</button>
+          <button class="btn-secondary" id="btn-leave">LEAVE</button>
+        </div>
+
+        <div class="chat-panel">
+          <div class="panel-header">CHAT</div>
+          <div id="chat-messages" class="chat-messages"></div>
+          <div class="chat-input">
+            <input type="text" id="chat-input" placeholder="Type message..." maxlength="200">
+            <button id="btn-send-chat">SEND</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- In-Game Overlay -->
+    <div id="screen-ingame" class="screen">
+      <div class="ingame-overlay">
+        <div class="ingame-header">
+          <span id="ingame-turn">COMBAT - YOUR TURN</span>
+          <span id="ingame-timer">30s</span>
+        </div>
+
+        <div class="ingame-players">
+          <div class="panel-header">PLAYERS</div>
+          <ul id="ingame-players-list"></ul>
+        </div>
+
+        <div class="ingame-chat">
+          <div id="ingame-chat-messages" class="chat-messages"></div>
+          <div class="chat-input">
+            <input type="text" id="ingame-chat-input" placeholder="Chat..." maxlength="200">
+          </div>
+        </div>
+
+        <div class="ingame-actions">
+          <button class="btn-small" id="btn-end-turn">END TURN</button>
+          <button class="btn-small" id="btn-menu">MENU</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <div id="loading-text">LOADING...</div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

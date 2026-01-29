@@ -1,0 +1,40 @@
+{
+  "name": "fallout1-mp-launcher",
+  "version": "1.0.0",
+  "description": "Multiplayer launcher for Fallout 1 RE",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "build:dir": "electron-builder --win --dir"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.fallout1.multiplayer",
+    "productName": "Fallout 1 Multiplayer",
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "assets/icon.ico"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../build-win32/Release/fallout-re.exe",
+        "to": "game/fallout-re.exe"
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

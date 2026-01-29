@@ -95,6 +95,8 @@ add_executable(${EXECUTABLE_NAME} WIN32
     "src/game/map.h"
     "src/game/message.c"
     "src/game/message.h"
+    "src/game/multiplayer.c"
+    "src/game/multiplayer.h"
     "src/game/moviefx.c"
     "src/game/moviefx.h"
     "src/game/object_types.h"

@@ -1,0 +1,203 @@
+const { app, BrowserWindow, ipcMain } = require('electron');
+const path = require('path');
+const { spawn } = require('child_process');
+const net = require('net');
+
+let mainWindow = null;
+let gameProcess = null;
+let ipcServer = null;
+let gameSocket = null;
+
+// IPC pipe name for communication with game
+const PIPE_NAME = '\\\\.\\pipe\\fallout1mp';
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 900,
+    height: 700,
+    resizable: false,
+    frame: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    },
+    backgroundColor: '#0a0a12'
+  });
+
+  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    stopGame();
+  });
+}
+
+// Create named pipe server for game communication
+function createIPCServer() {
+  return new Promise((resolve, reject) => {
+    ipcServer = net.createServer((socket) => {
+      console.log('Game connected to IPC');
+      gameSocket = socket;
+
+      socket.on('data', (data) => {
+        try {
+          const messages = data.toString().split('\n').filter(m => m.trim());
+          messages.forEach(msg => {
+            const parsed = JSON.parse(msg);
+            handleGameMessage(parsed);
+          });
+        } catch (e) {
+          console.error('Failed to parse game message:', e);
+        }
+      });
+
+      socket.on('close', () => {
+        console.log('Game disconnected from IPC');
+        gameSocket = null;
+      });
+
+      socket.on('error', (err) => {
+        console.error('Game socket error:', err);
+      });
+    });
+
+    ipcServer.listen(PIPE_NAME, () => {
+      console.log('IPC server listening on', PIPE_NAME);
+      resolve();
+    });
+
+    ipcServer.on('error', (err) => {
+      console.error('IPC server error:', err);
+      reject(err);
+    });
+  });
+}
+
+function handleGameMessage(message) {
+  // Forward game events to renderer
+  if (mainWindow) {
+    mainWindow.webContents.send('game-event', message);
+  }
+
+  switch (message.type) {
+    case 'ready':
+      console.log('Game is ready');
+      break;
+    case 'state-update':
+      // Forward to multiplayer server
+      break;
+    case 'action':
+      // Forward player action to server
+      break;
+  }
+}
+
+function sendToGame(message) {
+  if (gameSocket) {
+    gameSocket.write(JSON.stringify(message) + '\n');
+  }
+}
+
+// Launch the game executable
+async function launchGame(sessionInfo) {
+  const gamePath = app.isPackaged
+    ? path.join(process.resourcesPath, 'game', 'fallout-re.exe')
+    : path.join(__dirname, '..', '..', 'build-win32', 'Release', 'fallout-re.exe');
+
+  console.log('Launching game from:', gamePath);
+
+  // Set up IPC server before launching
+  try {
+    await createIPCServer();
+  } catch (e) {
+    console.error('Failed to create IPC server:', e);
+  }
+
+  // Launch game with multiplayer flags
+  gameProcess = spawn(gamePath, [
+    '-multiplayer',
+    '-pipe', PIPE_NAME,
+    '-session', sessionInfo.sessionId,
+    '-player', sessionInfo.participantId
+  ], {
+    cwd: path.dirname(gamePath),
+    stdio: 'pipe'
+  });
+
+  gameProcess.stdout.on('data', (data) => {
+    console.log('[Game]', data.toString());
+  });
+
+  gameProcess.stderr.on('data', (data) => {
+    console.error('[Game Error]', data.toString());
+  });
+
+  gameProcess.on('close', (code) => {
+    console.log('Game exited with code:', code);
+    gameProcess = null;
+    if (ipcServer) {
+      ipcServer.close();
+      ipcServer = null;
+    }
+    if (mainWindow) {
+      mainWindow.webContents.send('game-closed', { code });
+    }
+  });
+
+  return true;
+}
+
+function stopGame() {
+  if (gameProcess) {
+    gameProcess.kill();
+    gameProcess = null;
+  }
+  if (ipcServer) {
+    ipcServer.close();
+    ipcServer = null;
+  }
+}
+
+// IPC handlers from renderer
+ipcMain.handle('launch-game', async (event, sessionInfo) => {
+  return await launchGame(sessionInfo);
+});
+
+ipcMain.handle('stop-game', () => {
+  stopGame();
+  return true;
+});
+
+ipcMain.handle('send-to-game', (event, message) => {
+  sendToGame(message);
+  return true;
+});
+
+ipcMain.handle('get-game-status', () => {
+  return {
+    running: gameProcess !== null,
+    connected: gameSocket !== null
+  };
+});
+
+ipcMain.handle('minimize-window', () => {
+  mainWindow?.minimize();
+});
+
+ipcMain.handle('close-window', () => {
+  mainWindow?.close();
+});
+
+app.whenReady().then(createWindow);
+
+app.on('window-all-closed', () => {
+  stopGame();
+  app.quit();
+});
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
+});

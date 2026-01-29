@@ -155,36 +155,53 @@ build-web:
         - fallout1-web/**/*
 
 # ============================================================================
+# Multiplayer Launcher Build (Electron)
+# ============================================================================
+build-launcher:
+  stage: build
+  tags:
+    - windows
+    - shell
+  script:
+    - cd fallout1-launcher
+    - npm ci
+    - npm run build
+  artifacts:
+    name: "fallout1-launcher-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - fallout1-launcher/dist/*.exe
+    expire_in: 30 days
+  cache:
+    key: launcher-npm-${CI_COMMIT_REF_SLUG}
+    paths:
+      - fallout1-launcher/node_modules/
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - changes:
+        - fallout1-launcher/**/*
+
+# ============================================================================
 # Package Stage - Create Release Archive
 # ============================================================================
 package-release:
   stage: package
   tags:
-    - debian
+    - windows
   needs:
     - job: build-win32
       artifacts: true
-    - job: build-server
-      artifacts: true
-      optional: true
-    - job: build-web
+    - job: build-launcher
       artifacts: true
       optional: true
   script:
-    - sudo apt-get update && sudo apt-get install -y zip || true
-    - mkdir -p release
-    - cp build-win32/Release/fallout-re.exe release/
+    - New-Item -ItemType Directory -Path release -Force
+    - Copy-Item -Path "build-win32\Release\fallout-re.exe" -Destination release\ -Force
     - |
-      if [ -d "fallout1-server/dist" ]; then
-        mkdir -p release/server
-        cp -r fallout1-server/dist/* release/server/
-      fi
-    - |
-      if [ -d "fallout1-web/dist" ]; then
-        mkdir -p release/web
-        cp -r fallout1-web/dist/* release/web/
-      fi
-    - cd release && zip -r ../fallout1-re-${CI_COMMIT_SHORT_SHA}.zip .
+      if (Test-Path "fallout1-launcher\dist\*.exe") {
+        Copy-Item -Path "fallout1-launcher\dist\*.exe" -Destination release\ -Force
+      }
+    - Compress-Archive -Path release\* -DestinationPath "fallout1-re-$env:CI_COMMIT_SHORT_SHA.zip" -Force
   artifacts:
     name: "fallout1-re-release-${CI_COMMIT_SHORT_SHA}"
     paths:
@@ -205,6 +222,9 @@ deploy-win32:
       artifacts: true
     - job: build-win32-debug
       artifacts: true
+    - job: build-launcher
+      artifacts: true
+      optional: true
   script:
     - 'net use R: \\192.168.100.22\releases gitlab /user:root'
     - '$destPath = "R:\$env:CI_PROJECT_NAME\$env:CI_COMMIT_REF_NAME"'
@@ -212,6 +232,7 @@ deploy-win32:
     - 'Copy-Item -Path "build-win32\Release\fallout-re.exe" -Destination $destPath -Force'
     - 'Copy-Item -Path "build-win32-debug\RelWithDebInfo\fallout-re.exe" -Destination "$destPath\fallout-re-debug.exe" -Force -ErrorAction SilentlyContinue'
     - 'Copy-Item -Path "build-win32-debug\RelWithDebInfo\fallout-re.pdb" -Destination $destPath -Force -ErrorAction SilentlyContinue'
+    - 'Copy-Item -Path "fallout1-launcher\dist\*.exe" -Destination $destPath -Force -ErrorAction SilentlyContinue'
     - 'net use R: /delete'
   rules:
     - if: $CI_COMMIT_TAG
