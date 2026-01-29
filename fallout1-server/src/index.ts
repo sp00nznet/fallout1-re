@@ -22,7 +22,25 @@ const server = createServer(app);
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Electron, mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+
+    // Allow localhost and configured origins
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:3000',
+      process.env.CORS_ORIGIN
+    ].filter(Boolean);
+
+    if (allowedOrigins.includes(origin) || origin.startsWith('file://') || origin.startsWith('app://')) {
+      return callback(null, true);
+    }
+
+    callback(null, true); // Allow all for development - restrict in production
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
