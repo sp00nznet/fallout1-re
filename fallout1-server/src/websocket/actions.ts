@@ -300,8 +300,8 @@ async function handleAttack(
   broadcastToGame(ws.gameId!, result);
 
   ws.send(JSON.stringify({
-    type: 'action:attack-result',
     ...result,
+    type: 'action:attack-result',
     apRemaining: participant.currentAp - apCost
   }));
 }

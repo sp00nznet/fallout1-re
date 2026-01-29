@@ -96,8 +96,8 @@ export class ExplorationAI {
       }
     });
 
-    if (leastVisited) {
-      const [x, y] = leastVisited.split(',').map(Number);
+    if (leastVisited !== null) {
+      const [x, y] = (leastVisited as string).split(',').map(Number);
       // Pick center of sector
       return (y + Math.floor(sectorSize / 2)) * GRID_WIDTH + (x + Math.floor(sectorSize / 2));
     }
